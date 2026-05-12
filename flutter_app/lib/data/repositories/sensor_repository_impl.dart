@@ -4,8 +4,8 @@ import '../datasources/api_service.dart';
 
 class SensorRepositoryImpl implements SensorRepository {
   @override
-  Future<SensorData> getLatestReading({String deviceId = 'Ankara-RPi-01'}) {
-    return ApiService.getLatestReading(deviceId: deviceId);
+  Future<SensorData> getLatestReading({int? sensorId}) {
+    return ApiService.getLatestReading(sensorId: sensorId);
   }
 
   @override

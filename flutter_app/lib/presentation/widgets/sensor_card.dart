@@ -20,7 +20,9 @@ class SensorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = isAlert ? const Color(0xFFFF5A5F) : const Color(0xFF30363D);
+    final borderColor = isAlert
+        ? const Color(0xFFFF5A5F)
+        : const Color(0xFF30363D);
     final valueColor = isAlert ? const Color(0xFFFF6B6B) : Colors.white;
 
     return Container(
@@ -35,18 +37,29 @@ class SensorCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: isAlert ? const Color(0xFFFF6B6B) : color, size: 20),
+              Icon(
+                icon,
+                color: isAlert ? const Color(0xFFFF6B6B) : color,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF8B949E), fontSize: 13),
+                  style: const TextStyle(
+                    color: Color(0xFF8B949E),
+                    fontSize: 13,
+                  ),
                 ),
               ),
               if (isAlert)
-                const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF6B6B), size: 18),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFFF6B6B),
+                  size: 18,
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -72,7 +85,10 @@ class SensorCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 5),
                 child: Text(
                   unit,
-                  style: const TextStyle(color: Color(0xFF8B949E), fontSize: 14),
+                  style: const TextStyle(
+                    color: Color(0xFF8B949E),
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],

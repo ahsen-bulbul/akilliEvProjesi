@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'presentation/screens/login_screen.dart';
+import 'presentation/screens/camera_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/sensors_screen.dart';
 import 'presentation/screens/control_screen.dart';
 import 'presentation/screens/stats_screen.dart';
 
-void main() {
-  runApp(const SmartHomeApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  final isSupabaseConfigured =
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
+  if (isSupabaseConfigured) {
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  }
+
+  runApp(SmartHomeApp(isSupabaseConfigured: isSupabaseConfigured));
 }
 
 class SmartHomeApp extends StatelessWidget {
-  const SmartHomeApp({super.key});
+  final bool isSupabaseConfigured;
+
+  const SmartHomeApp({super.key, this.isSupabaseConfigured = false});
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +41,47 @@ class SmartHomeApp extends StatelessWidget {
         ),
         textTheme: GoogleFonts.dmSansTextTheme(ThemeData.dark().textTheme),
       ),
-      home: const MainScreen(),
+      home: isSupabaseConfigured
+          ? const AuthGate()
+          : const _SupabaseConfigScreen(),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session == null) {
+          return const LoginScreen();
+        }
+        return const MainScreen();
+      },
+    );
+  }
+}
+
+class _SupabaseConfigScreen extends StatelessWidget {
+  const _SupabaseConfigScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Supabase ayarlari eksik. Flutter run komutuna SUPABASE_URL ve SUPABASE_ANON_KEY dart-define olarak ekleyin.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(color: Colors.white, fontSize: 15),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -45,15 +101,23 @@ class _MainScreenState extends State<MainScreen> {
     SensorsScreen(),
     ControlScreen(),
     StatsScreen(),
+    CameraScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
+      floatingActionButton: FloatingActionButton.small(
+        tooltip: 'Cikis yap',
+        backgroundColor: const Color(0xFF161B22),
+        foregroundColor: const Color(0xFF00D4AA),
+        onPressed: () => Supabase.instance.client.auth.signOut(),
+        child: const Icon(Icons.logout),
+      ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF161B22),
-        indicatorColor: const Color(0xFF00D4AA).withOpacity(0.2),
+        indicatorColor: const Color(0xFF00D4AA).withValues(alpha: 0.2),
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
         destinations: const [
@@ -76,6 +140,11 @@ class _MainScreenState extends State<MainScreen> {
             icon: Icon(Icons.bar_chart_outlined),
             selectedIcon: Icon(Icons.bar_chart, color: Color(0xFF00D4AA)),
             label: 'Stats',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.videocam_outlined),
+            selectedIcon: Icon(Icons.videocam, color: Color(0xFF00D4AA)),
+            label: 'Camera',
           ),
         ],
       ),

@@ -14,7 +14,6 @@ class _HomeScreenState extends State<HomeScreen> {
   double _temperature = 22.5;
   double _humidity = 65.0;
   double _airFlow = 12.0;
-  bool _isLoading = false;
   Timer? _timer;
   final _rnd = Random();
 
@@ -172,10 +171,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00D4AA).withOpacity(0.15),
+                            color: const Color(
+                              0xFF00D4AA,
+                            ).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: const Color(0xFF00D4AA).withOpacity(0.3),
+                              color: const Color(
+                                0xFF00D4AA,
+                              ).withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(
@@ -330,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00D4AA).withOpacity(0.1),
+                        color: const Color(0xFF00D4AA).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
@@ -367,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00D4AA).withOpacity(0.1),
+                        color: const Color(0xFF00D4AA).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -442,7 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 20),

@@ -76,9 +76,10 @@ class _StatsScreenState extends State<StatsScreen> {
     final now = DateTime.now();
     return _history.where((reading) {
       final local = reading.createdAt.toLocal();
-      return local.year == now.year && local.month == now.month && local.day == now.day;
-    }).toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return local.year == now.year &&
+          local.month == now.month &&
+          local.day == now.day;
+    }).toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
   }
 
   @override
@@ -100,13 +101,16 @@ class _StatsScreenState extends State<StatsScreen> {
               else if (_error != null)
                 _StatsStatus(text: _error!, isError: true)
               else if (today.isEmpty)
-                const _StatsStatus(text: 'No PostgreSQL records found for today.')
+                const _StatsStatus(
+                  text: 'No PostgreSQL records found for today.',
+                )
               else ...[
                 _SummaryGrid(readings: today),
                 const SizedBox(height: 18),
                 _MetricSelector(
                   selected: _selectedMetric,
-                  onSelected: (metric) => setState(() => _selectedMetric = metric),
+                  onSelected: (metric) =>
+                      setState(() => _selectedMetric = metric),
                 ),
                 const SizedBox(height: 14),
                 _MetricChart(readings: today, metric: _selectedMetric),
@@ -143,7 +147,10 @@ class _StatsHeader extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'PostgreSQL sensor history',
-                style: GoogleFonts.dmSans(color: const Color(0xFF8B949E), fontSize: 13),
+                style: GoogleFonts.dmSans(
+                  color: const Color(0xFF8B949E),
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -157,7 +164,10 @@ class _StatsHeader extends StatelessWidget {
           ),
           child: Text(
             '$recordCount records',
-            style: GoogleFonts.spaceMono(color: const Color(0xFF00D4AA), fontSize: 12),
+            style: GoogleFonts.spaceMono(
+              color: const Color(0xFF00D4AA),
+              fontSize: 12,
+            ),
           ),
         ),
       ],
@@ -174,7 +184,9 @@ class _SummaryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final summaries = _Metric.values.map((metric) {
       final values = readings.map(metric.valueOf).whereType<double>().toList();
-      final average = values.isEmpty ? null : values.reduce((a, b) => a + b) / values.length;
+      final average = values.isEmpty
+          ? null
+          : values.reduce((a, b) => a + b) / values.length;
       return _MetricSummary(metric: metric, average: average);
     }).toList();
 
@@ -203,13 +215,20 @@ class _SummaryGrid extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(summary.metric.icon, color: summary.metric.color, size: 18),
+                  Icon(
+                    summary.metric.icon,
+                    color: summary.metric.color,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       summary.metric.label,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(color: const Color(0xFF8B949E), fontSize: 12),
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF8B949E),
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -222,7 +241,9 @@ class _SummaryGrid extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        summary.average == null ? '--' : summary.average!.toStringAsFixed(1),
+                        summary.average == null
+                            ? '--'
+                            : summary.average!.toStringAsFixed(1),
                         style: GoogleFonts.spaceMono(
                           color: Colors.white,
                           fontSize: 28,
@@ -236,7 +257,10 @@ class _SummaryGrid extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       summary.metric.unit,
-                      style: GoogleFonts.dmSans(color: const Color(0xFF8B949E), fontSize: 12),
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF8B949E),
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -286,7 +310,9 @@ class _MetricSelector extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
-              side: BorderSide(color: isSelected ? metric.color : const Color(0xFF30363D)),
+              side: BorderSide(
+                color: isSelected ? metric.color : const Color(0xFF30363D),
+              ),
               onSelected: (_) => onSelected(metric),
             ),
           );
@@ -305,7 +331,10 @@ class _MetricChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final values = readings
-        .map((reading) => _ChartPoint(reading.createdAt.toLocal(), metric.valueOf(reading)))
+        .map(
+          (reading) =>
+              _ChartPoint(reading.createdAt.toLocal(), metric.valueOf(reading)),
+        )
         .where((point) => point.value != null)
         .toList();
 
@@ -314,11 +343,14 @@ class _MetricChart extends StatelessWidget {
     }
 
     final spots = [
-      for (var i = 0; i < values.length; i++) FlSpot(i.toDouble(), values[i].value!),
+      for (var i = 0; i < values.length; i++)
+        FlSpot(i.toDouble(), values[i].value!),
     ];
     final minY = spots.map((spot) => spot.y).reduce((a, b) => a < b ? a : b);
     final maxY = spots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b);
-    final yPadding = ((maxY - minY).abs() * 0.2).clamp(1.0, double.infinity).toDouble();
+    final yPadding = ((maxY - minY).abs() * 0.2)
+        .clamp(1.0, double.infinity)
+        .toDouble();
 
     return Container(
       height: 290,
@@ -346,7 +378,10 @@ class _MetricChart extends StatelessWidget {
               const Spacer(),
               Text(
                 DateFormat('MMM d').format(DateTime.now()),
-                style: GoogleFonts.spaceMono(color: const Color(0xFF8B949E), fontSize: 12),
+                style: GoogleFonts.spaceMono(
+                  color: const Color(0xFF8B949E),
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
@@ -358,10 +393,8 @@ class _MetricChart extends StatelessWidget {
                 maxY: maxY + yPadding,
                 gridData: FlGridData(
                   drawVerticalLine: false,
-                  getDrawingHorizontalLine: (_) => const FlLine(
-                    color: Color(0xFF30363D),
-                    strokeWidth: 1,
-                  ),
+                  getDrawingHorizontalLine: (_) =>
+                      const FlLine(color: Color(0xFF30363D), strokeWidth: 1),
                 ),
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(
@@ -371,7 +404,10 @@ class _MetricChart extends StatelessWidget {
                       reservedSize: 42,
                       getTitlesWidget: (value, meta) => Text(
                         value.toStringAsFixed(0),
-                        style: GoogleFonts.spaceMono(color: const Color(0xFF8B949E), fontSize: 10),
+                        style: GoogleFonts.spaceMono(
+                          color: const Color(0xFF8B949E),
+                          fontSize: 10,
+                        ),
                       ),
                     ),
                   ),
@@ -398,8 +434,12 @@ class _MetricChart extends StatelessWidget {
                       },
                     ),
                   ),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                 ),
                 lineBarsData: [
                   LineChartBarData(
@@ -410,7 +450,7 @@ class _MetricChart extends StatelessWidget {
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: metric.color.withOpacity(0.12),
+                      color: metric.color.withValues(alpha: 0.12),
                     ),
                   ),
                 ],
@@ -443,7 +483,9 @@ class _StatsStatus extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF161B22),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isError ? const Color(0xFFFF6B6B) : const Color(0xFF30363D)),
+        border: Border.all(
+          color: isError ? const Color(0xFFFF6B6B) : const Color(0xFF30363D),
+        ),
       ),
       child: Text(
         text,

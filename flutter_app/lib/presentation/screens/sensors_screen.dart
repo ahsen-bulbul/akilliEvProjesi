@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import '../../data/datasources/api_service.dart';
+import '../../data/datasources/mqtt_sensor_service.dart';
 import '../../domain/entities/sensor_data.dart';
 import '../../domain/entities/sensor_threshold.dart';
 import '../widgets/sensor_card.dart';
@@ -18,15 +19,26 @@ class SensorsScreen extends StatefulWidget {
 
 class _SensorsScreenState extends State<SensorsScreen> {
   static const _thresholds = [
-    SensorThreshold(key: 'temperature', label: 'Temperature', max: 30, unit: 'C'),
+    SensorThreshold(
+      key: 'temperature',
+      label: 'Temperature',
+      max: 30,
+      unit: 'C',
+    ),
     SensorThreshold(key: 'humidity', label: 'Humidity', max: 70, unit: '%'),
     SensorThreshold(key: 'gas', label: 'Gas Level', max: 400, unit: 'ppm'),
-    SensorThreshold(key: 'light', label: 'Light Level', max: 900, unit: 'lx'),
-    SensorThreshold(key: 'distance', label: 'Distance', min: 15, unit: 'cm'),
+    SensorThreshold(
+      key: 'soil',
+      label: 'Soil Moisture',
+      min: 20,
+      max: 80,
+      unit: '%',
+    ),
   ];
 
   SensorData? _latest;
-  Timer? _timer;
+  final MqttSensorService _mqttService = MqttSensorService();
+  StreamSubscription<SensorData>? _mqttSubscription;
   bool _loading = true;
   String? _error;
   int? _lastNotifiedReadingId;
@@ -34,28 +46,45 @@ class _SensorsScreenState extends State<SensorsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadLatest();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _loadLatest());
+    _connectMqtt();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _mqttSubscription?.cancel();
+    _mqttService.dispose();
     super.dispose();
   }
 
-  Future<void> _loadLatest() async {
+  Future<void> _connectMqtt() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
     try {
-      final reading = await ApiService.getLatestReading();
+      await _mqttSubscription?.cancel();
+      await _mqttService.disconnect();
+      _mqttSubscription = _mqttService.readings.listen(
+        _handleReading,
+        onError: (error) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _loading = false;
+            _error = error.toString();
+          });
+        },
+      );
+      await _mqttService.connect();
       if (!mounted) {
         return;
       }
       setState(() {
-        _latest = reading;
         _loading = false;
         _error = null;
       });
-      _notifyIfNeeded(reading);
     } catch (e) {
       if (!mounted) {
         return;
@@ -65,6 +94,18 @@ class _SensorsScreenState extends State<SensorsScreen> {
         _error = e.toString();
       });
     }
+  }
+
+  void _handleReading(SensorData reading) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _latest = reading;
+      _loading = false;
+      _error = null;
+    });
+    _notifyIfNeeded(reading);
   }
 
   void _notifyIfNeeded(SensorData reading) {
@@ -89,7 +130,10 @@ class _SensorsScreenState extends State<SensorsScreen> {
 
   List<String> _alertLabels(SensorData reading) {
     return _thresholds
-        .where((threshold) => threshold.isExceeded(_valueFor(reading, threshold.key)))
+        .where(
+          (threshold) =>
+              threshold.isExceeded(_valueFor(reading, threshold.key)),
+        )
         .map((threshold) => threshold.label)
         .toList();
   }
@@ -99,8 +143,7 @@ class _SensorsScreenState extends State<SensorsScreen> {
       'temperature' => reading.temperature,
       'humidity' => reading.humidity,
       'gas' => reading.gasLevel,
-      'light' => reading.lightLevel,
-      'distance' => reading.distanceCm,
+      'soil' => reading.soilMoisture,
       _ => null,
     };
   }
@@ -116,7 +159,7 @@ class _SensorsScreenState extends State<SensorsScreen> {
       backgroundColor: const Color(0xFF0D1117),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadLatest,
+          onRefresh: _connectMqtt,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
             children: [
@@ -168,8 +211,11 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'MQTT feed via HiveMQ and backend API',
-                style: GoogleFonts.dmSans(color: const Color(0xFF8B949E), fontSize: 13),
+                'Direct MQTT feed via HiveMQ',
+                style: GoogleFonts.dmSans(
+                  color: const Color(0xFF8B949E),
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -180,13 +226,17 @@ class _Header extends StatelessWidget {
             color: hasAlert ? const Color(0xFF5A1F24) : const Color(0xFF12362F),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: hasAlert ? const Color(0xFFFF6B6B) : const Color(0xFF00D4AA),
+              color: hasAlert
+                  ? const Color(0xFFFF6B6B)
+                  : const Color(0xFF00D4AA),
             ),
           ),
           child: Text(
             updatedAt,
             style: GoogleFonts.spaceMono(
-              color: hasAlert ? const Color(0xFFFFB4B4) : const Color(0xFF75E6D0),
+              color: hasAlert
+                  ? const Color(0xFFFFB4B4)
+                  : const Color(0xFF75E6D0),
               fontSize: 12,
             ),
           ),
@@ -228,7 +278,10 @@ class _DevicePanel extends StatelessWidget {
                 ),
                 Text(
                   'Reading #${reading.id}',
-                  style: GoogleFonts.dmSans(color: const Color(0xFF8B949E), fontSize: 12),
+                  style: GoogleFonts.dmSans(
+                    color: const Color(0xFF8B949E),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -248,11 +301,70 @@ class _SensorGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cards = [
-      _SensorCardData('Temperature', reading.temperature, 'C', Icons.thermostat, const Color(0xFFFFB020), reading.temperature != null && reading.temperature! > 30),
-      _SensorCardData('Humidity', reading.humidity, '%', Icons.water_drop_outlined, const Color(0xFF58A6FF), reading.humidity != null && reading.humidity! > 70),
-      _SensorCardData('Gas Level', reading.gasLevel, 'ppm', Icons.air, const Color(0xFF9B59B6), reading.gasLevel != null && reading.gasLevel! > 400),
-      _SensorCardData('Light Level', reading.lightLevel, 'lx', Icons.light_mode_outlined, const Color(0xFFFFD166), reading.lightLevel != null && reading.lightLevel! > 900),
-      _SensorCardData('Distance', reading.distanceCm, 'cm', Icons.straighten, const Color(0xFF00D4AA), reading.distanceCm != null && reading.distanceCm! < 15),
+      _SensorCardData(
+        'Temperature',
+        reading.temperature,
+        'C',
+        Icons.thermostat,
+        const Color(0xFFFFB020),
+        reading.temperature != null && reading.temperature! > 30,
+      ),
+      _SensorCardData(
+        'Soil Moisture',
+        reading.soilMoisture ?? reading.humidity,
+        '%',
+        Icons.water_drop_outlined,
+        const Color(0xFF58A6FF),
+        (reading.soilMoisture ?? reading.humidity) != null &&
+            ((reading.soilMoisture ?? reading.humidity)! < 20 ||
+                (reading.soilMoisture ?? reading.humidity)! > 80),
+      ),
+      _SensorCardData(
+        'MQ9 Gas',
+        reading.gasLevel,
+        'raw',
+        Icons.air,
+        const Color(0xFF9B59B6),
+        reading.gasLevel != null && reading.gasLevel! > 500,
+      ),
+      _SensorCardData(
+        'Motion',
+        null,
+        '',
+        Icons.directions_run,
+        const Color(0xFFFF6B6B),
+        reading.motionDetected == true,
+        valueText: reading.motionDetected == null
+            ? '--'
+            : (reading.motionDetected! ? 'Detected' : 'Clear'),
+      ),
+      _SensorCardData(
+        'Buzzer',
+        null,
+        '',
+        Icons.notifications_active_outlined,
+        const Color(0xFF00D4AA),
+        reading.buzzer == true,
+        valueText: reading.buzzer == null
+            ? '--'
+            : (reading.buzzer! ? 'On' : 'Off'),
+      ),
+      _SensorCardData(
+        'Accel',
+        _vectorMagnitude(reading.accelerometer),
+        'm/s2',
+        Icons.screen_rotation_alt_outlined,
+        const Color(0xFFFFD166),
+        false,
+      ),
+      _SensorCardData(
+        'Gyro',
+        _vectorMagnitude(reading.gyroscope),
+        'dps',
+        Icons.threesixty,
+        const Color(0xFF00B8D9),
+        false,
+      ),
     ];
 
     return GridView.builder(
@@ -269,7 +381,9 @@ class _SensorGrid extends StatelessWidget {
         final card = cards[index];
         return SensorCard(
           label: card.label,
-          value: card.value == null ? '--' : card.value!.toStringAsFixed(1),
+          value:
+              card.valueText ??
+              (card.value == null ? '--' : card.value!.toStringAsFixed(1)),
           unit: card.unit,
           icon: card.icon,
           color: card.color,
@@ -277,6 +391,16 @@ class _SensorGrid extends StatelessWidget {
         );
       },
     );
+  }
+
+  double? _vectorMagnitude(Map<String, double>? vector) {
+    if (vector == null) {
+      return null;
+    }
+    final x = vector['x'] ?? 0;
+    final y = vector['y'] ?? 0;
+    final z = vector['z'] ?? 0;
+    return sqrt(x * x + y * y + z * z);
   }
 }
 
@@ -287,6 +411,7 @@ class _SensorCardData {
   final IconData icon;
   final Color color;
   final bool isAlert;
+  final String? valueText;
 
   const _SensorCardData(
     this.label,
@@ -294,8 +419,9 @@ class _SensorCardData {
     this.unit,
     this.icon,
     this.color,
-    this.isAlert,
-  );
+    this.isAlert, {
+    this.valueText,
+  });
 }
 
 class _StatusPanel extends StatelessWidget {
@@ -311,7 +437,9 @@ class _StatusPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF161B22),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isError ? const Color(0xFFFF6B6B) : const Color(0xFF30363D)),
+        border: Border.all(
+          color: isError ? const Color(0xFFFF6B6B) : const Color(0xFF30363D),
+        ),
       ),
       child: Text(
         text,

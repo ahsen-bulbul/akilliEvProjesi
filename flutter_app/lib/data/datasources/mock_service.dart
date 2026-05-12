@@ -15,7 +15,10 @@ class MockService {
   static SensorDataModel generateReading() {
     return SensorDataModel(
       id: _idCounter++,
+      sensorId: 1,
       deviceId: 'Ankara-RPi-01',
+      sensorName: 'Living Room Sensor',
+      sensorType: 'environment',
       temperature: _rndBetween(18, 36),
       humidity: _rndBetween(30, 85),
       gasLevel: _rndBetween(0, 120),
@@ -29,7 +32,10 @@ class MockService {
     return List.generate(count, (i) {
       return SensorDataModel(
         id: _idCounter++,
+        sensorId: 1,
         deviceId: 'Ankara-RPi-01',
+        sensorName: 'Living Room Sensor',
+        sensorType: 'environment',
         temperature: _rndBetween(18, 36),
         humidity: _rndBetween(30, 85),
         gasLevel: _rndBetween(0, 120),
