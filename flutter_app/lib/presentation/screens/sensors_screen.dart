@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/datasources/mqtt_sensor_service.dart';
+import '../../data/services/notification_service.dart';
 import '../../domain/entities/sensor_data.dart';
 import '../../domain/entities/sensor_threshold.dart';
 import '../widgets/sensor_card.dart';
@@ -42,6 +43,8 @@ class _SensorsScreenState extends State<SensorsScreen> {
   bool _loading = true;
   String? _error;
   int? _lastNotifiedReadingId;
+  String? _lastSystemNotificationKey;
+  DateTime? _lastSystemNotificationAt;
 
   @override
   void initState() {
@@ -126,6 +129,23 @@ class _SensorsScreenState extends State<SensorsScreen> {
         ),
       ),
     );
+
+    _notifyPhoneIfNeeded(alerts);
+  }
+
+  void _notifyPhoneIfNeeded(List<String> alerts) {
+    final key = alerts.join('|');
+    final now = DateTime.now();
+    final lastAt = _lastSystemNotificationAt;
+    if (_lastSystemNotificationKey == key &&
+        lastAt != null &&
+        now.difference(lastAt) < const Duration(seconds: 60)) {
+      return;
+    }
+
+    _lastSystemNotificationKey = key;
+    _lastSystemNotificationAt = now;
+    NotificationService.showSensorAlert(alerts);
   }
 
   List<String> _alertLabels(SensorData reading) {

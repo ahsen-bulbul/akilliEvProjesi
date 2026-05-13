@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "390869114285",
+    "project_id": "smart-home-e9001",
+    "storage_bucket": "smart-home-e9001.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:390869114285:android:d325245338fb11fb041524",
+        "android_client_info": {
+          "package_name": "com.smarthome.flutter_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwdRVn9xIBeLJQcLpekNPeHzL4HQT4MjE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

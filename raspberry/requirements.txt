@@ -1,3 +1,4 @@
 paho-mqtt==1.6.1
+pyserial==3.5
 # Adafruit-DHT==1.4.0    # gerçek DHT22 için
 # RPi.GPIO==0.7.0         # gerçek GPIO için

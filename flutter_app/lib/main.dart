@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'data/services/notification_service.dart';
+import 'data/services/firebase_service.dart';
 import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/camera_screen.dart';
 import 'presentation/screens/home_screen.dart';
@@ -11,6 +14,8 @@ import 'presentation/screens/stats_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp();
+
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   final isSupabaseConfigured =
@@ -19,6 +24,8 @@ Future<void> main() async {
   if (isSupabaseConfigured) {
     await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   }
+  await NotificationService.initialize();
+  await FirebaseService.initialize();
 
   runApp(SmartHomeApp(isSupabaseConfigured: isSupabaseConfigured));
 }
