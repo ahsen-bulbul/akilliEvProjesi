@@ -71,7 +71,9 @@ class FirebaseService {
     debugPrint('Message data: ${message.data}');
 
     if (message.notification != null) {
-      debugPrint('Message also contained a notification: ${message.notification}');
+      debugPrint(
+        'Message also contained a notification: ${message.notification}',
+      );
     }
   }
 }

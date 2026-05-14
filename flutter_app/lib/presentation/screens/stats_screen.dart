@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import '../../data/datasources/api_service.dart';
+import '../../data/repositories/offline_first_sensor_repository.dart';
 import '../../domain/entities/sensor_data.dart';
 
 enum _Metric {
@@ -39,6 +39,8 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
+  final OfflineFirstSensorRepository _repository =
+      OfflineFirstSensorRepository();
   List<SensorData> _history = const [];
   _Metric _selectedMetric = _Metric.temperature;
   bool _loading = true;
@@ -52,7 +54,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Future<void> _loadHistory() async {
     try {
-      final history = await ApiService.getSensorHistory(limit: 200);
+      final history = await _repository.getSensorHistory(limit: 200);
       if (!mounted) {
         return;
       }
@@ -72,19 +74,68 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  List<SensorData> get _todayReadings {
+  List<SensorData> get _displayReadings {
     final now = DateTime.now();
+    final today = _readingsForDay(now);
+    if (today.isNotEmpty) {
+      return today;
+    }
+
+    if (_history.isEmpty) {
+      return const [];
+    }
+
+    final latest = _history
+        .map((reading) => reading.createdAt.toLocal())
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    return _readingsForDay(latest);
+  }
+
+  String get _periodLabel {
+    final day = _displayDay;
+    if (day == null) {
+      return 'No data';
+    }
+
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final date = DateFormat('MMM d, yyyy').format(day);
+    if (_isSameDay(day, now)) {
+      return 'Today - $date';
+    }
+    if (_isSameDay(day, yesterday)) {
+      return 'Yesterday - $date';
+    }
+    return date;
+  }
+
+  DateTime? get _displayDay {
+    final readings = _displayReadings;
+    if (readings.isEmpty) {
+      return null;
+    }
+    return readings.first.createdAt.toLocal();
+  }
+
+  List<SensorData> _readingsForDay(DateTime day) {
     return _history.where((reading) {
       final local = reading.createdAt.toLocal();
-      return local.year == now.year &&
-          local.month == now.month &&
-          local.day == now.day;
+      return _isSameDay(local, day);
     }).toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool get _isShowingToday {
+    final day = _displayDay;
+    return day != null && _isSameDay(day, DateTime.now());
   }
 
   @override
   Widget build(BuildContext context) {
-    final today = _todayReadings;
+    final readings = _displayReadings;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
@@ -94,18 +145,26 @@ class _StatsScreenState extends State<StatsScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
             children: [
-              _StatsHeader(recordCount: today.length),
+              _StatsHeader(recordCount: readings.length, period: _periodLabel),
               const SizedBox(height: 18),
               if (_loading)
                 const _StatsStatus(text: 'Loading daily statistics...')
               else if (_error != null)
                 _StatsStatus(text: _error!, isError: true)
-              else if (today.isEmpty)
+              else if (readings.isEmpty)
                 const _StatsStatus(
-                  text: 'No PostgreSQL records found for today.',
+                  text: 'No PostgreSQL or cached sensor records found.',
                 )
               else ...[
-                _SummaryGrid(readings: today),
+                if (!_isShowingToday) ...[
+                  _StatsStatus(
+                    text:
+                        'No records found for today. Showing $_periodLabel statistics from history.',
+                    isWarning: true,
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                _SummaryGrid(readings: readings),
                 const SizedBox(height: 18),
                 _MetricSelector(
                   selected: _selectedMetric,
@@ -113,7 +172,7 @@ class _StatsScreenState extends State<StatsScreen> {
                       setState(() => _selectedMetric = metric),
                 ),
                 const SizedBox(height: 14),
-                _MetricChart(readings: today, metric: _selectedMetric),
+                _MetricChart(readings: readings, metric: _selectedMetric),
               ],
             ],
           ),
@@ -125,8 +184,9 @@ class _StatsScreenState extends State<StatsScreen> {
 
 class _StatsHeader extends StatelessWidget {
   final int recordCount;
+  final String period;
 
-  const _StatsHeader({required this.recordCount});
+  const _StatsHeader({required this.recordCount, required this.period});
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +206,7 @@ class _StatsHeader extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'PostgreSQL sensor history',
+                '$period sensor history',
                 style: GoogleFonts.dmSans(
                   color: const Color(0xFF8B949E),
                   fontSize: 13,
@@ -473,8 +533,13 @@ class _ChartPoint {
 class _StatsStatus extends StatelessWidget {
   final String text;
   final bool isError;
+  final bool isWarning;
 
-  const _StatsStatus({required this.text, this.isError = false});
+  const _StatsStatus({
+    required this.text,
+    this.isError = false,
+    this.isWarning = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -484,13 +549,21 @@ class _StatsStatus extends StatelessWidget {
         color: const Color(0xFF161B22),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isError ? const Color(0xFFFF6B6B) : const Color(0xFF30363D),
+          color: isError
+              ? const Color(0xFFFF6B6B)
+              : isWarning
+              ? const Color(0xFFFFD166)
+              : const Color(0xFF30363D),
         ),
       ),
       child: Text(
         text,
         style: GoogleFonts.dmSans(
-          color: isError ? const Color(0xFFFFB4B4) : const Color(0xFF8B949E),
+          color: isError
+              ? const Color(0xFFFFB4B4)
+              : isWarning
+              ? const Color(0xFFFFD166)
+              : const Color(0xFF8B949E),
           fontSize: 13,
         ),
       ),

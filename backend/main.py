@@ -4,12 +4,17 @@ import hmac
 import json
 import logging
 import os
+import urllib.parse
+import urllib.request
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import models
@@ -17,8 +22,6 @@ import schemas
 from database import engine, get_db
 from mqtt_client import start_mqtt_client
 from firebase_service import initialize_firebase
-
-models.Base.metadata.create_all(bind=engine)
 
 
 def _b64url_decode(value: str) -> bytes:
@@ -50,11 +53,38 @@ def get_current_user_id(authorization: Optional[str] = Header(default=None)) -> 
         raise HTTPException(status_code=401, detail="Token kullanici bilgisi okunamadi") from exc
 
 
+def _weather_condition(code: Optional[int]) -> str:
+    if code is None:
+        return "Bilinmiyor"
+    if code == 0:
+        return "Acik"
+    if code in {1, 2}:
+        return "Parcali bulutlu"
+    if code == 3:
+        return "Bulutlu"
+    if code in {45, 48}:
+        return "Sisli"
+    if code in {51, 53, 55, 56, 57}:
+        return "Cisenti"
+    if code in {61, 63, 65, 66, 67, 80, 81, 82}:
+        return "Yagmurlu"
+    if code in {71, 73, 75, 77, 85, 86}:
+        return "Karli"
+    if code in {95, 96, 99}:
+        return "Firtinali"
+    return "Degisken"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        models.Base.metadata.create_all(bind=engine)
+    except SQLAlchemyError as exc:
+        logging.warning("Veritabani semasi kontrol edilemedi: %s", exc)
+
     # Firebase initialize et
     initialize_firebase()
-    
+
     # MQTT başlat
     if os.getenv("ENABLE_MQTT") == "1":
         try:
@@ -72,6 +102,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logging.warning("Veritabani gecici olarak kullanilamiyor: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Veritabani gecici olarak kullanilamiyor."},
+    )
 
 
 @app.get("/sensors", response_model=List[schemas.SensorReadingOut])
@@ -155,6 +194,65 @@ def get_sensors(
     )
 
 
+@app.get("/weather/current", response_model=schemas.WeatherOut)
+def get_current_weather(
+    user_id: UUID = Depends(get_current_user_id),
+):
+    del user_id
+    latitude = os.getenv("HOME_LATITUDE", "41.0027")
+    longitude = os.getenv("HOME_LONGITUDE", "39.7168")
+    location = os.getenv("HOME_LOCATION_NAME", "Trabzon")
+
+    params = urllib.parse.urlencode(
+        {
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": ",".join(
+                [
+                    "temperature_2m",
+                    "relative_humidity_2m",
+                    "apparent_temperature",
+                    "weather_code",
+                    "wind_speed_10m",
+                    "is_day",
+                ]
+            ),
+            "daily": "uv_index_max",
+            "timezone": "auto",
+        }
+    )
+    url = f"https://api.open-meteo.com/v1/forecast?{params}"
+
+    try:
+        with urllib.request.urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        logging.warning("Hava durumu servisi okunamadi: %s", exc)
+        raise HTTPException(status_code=503, detail="Hava durumu servisi gecici olarak kullanilamiyor")
+
+    current = payload.get("current") or {}
+    daily = payload.get("daily") or {}
+    temperature = current.get("temperature_2m")
+    if temperature is None:
+        raise HTTPException(status_code=502, detail="Hava durumu yaniti eksik")
+
+    weather_code = current.get("weather_code")
+    uv_index = (daily.get("uv_index_max") or [None])[0]
+
+    return {
+        "location": location,
+        "temperature": temperature,
+        "apparent_temperature": current.get("apparent_temperature"),
+        "humidity": current.get("relative_humidity_2m"),
+        "wind_speed": current.get("wind_speed_10m"),
+        "uv_index": uv_index,
+        "condition": _weather_condition(weather_code),
+        "weather_code": weather_code,
+        "is_day": current.get("is_day") == 1,
+        "observed_at": current.get("time"),
+    }
+
+
 @app.post("/control")
 def send_control_command(
     cmd: schemas.ControlCommand,
@@ -202,7 +300,7 @@ def register_fcm_token(
         
         if existing:
             # Zaten varsa updated_at'i güncelle
-            existing.updated_at = db.func.now()
+            existing.updated_at = func.now()
             db.commit()
             return existing
         else:

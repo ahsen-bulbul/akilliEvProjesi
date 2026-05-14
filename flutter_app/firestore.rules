@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sensor_alarm_logs/{logId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'reading_id',
+          'sensor_id',
+          'device_id',
+          'labels',
+          'temperature',
+          'humidity',
+          'gas_level',
+          'soil_moisture',
+          'created_at',
+          'written_at'
+        ]);
+      allow update, delete: if false;
+    }
+  }
+}

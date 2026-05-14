@@ -1,14 +1,14 @@
-import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
-import '../../data/datasources/mqtt_sensor_service.dart';
-import '../../data/services/notification_service.dart';
 import '../../domain/entities/sensor_data.dart';
-import '../../domain/entities/sensor_threshold.dart';
+import '../../domain/entities/sensor_alarm_log.dart';
+import '../viewmodels/firebase_alarm_log_view_model.dart';
+import '../viewmodels/sensor_view_model.dart';
 import '../widgets/sensor_card.dart';
 
 class SensorsScreen extends StatefulWidget {
@@ -19,105 +19,9 @@ class SensorsScreen extends StatefulWidget {
 }
 
 class _SensorsScreenState extends State<SensorsScreen> {
-  static const _thresholds = [
-    SensorThreshold(
-      key: 'temperature',
-      label: 'Temperature',
-      max: 30,
-      unit: 'C',
-    ),
-    SensorThreshold(key: 'humidity', label: 'Humidity', max: 70, unit: '%'),
-    SensorThreshold(key: 'gas', label: 'Gas Level', max: 400, unit: 'ppm'),
-    SensorThreshold(
-      key: 'soil',
-      label: 'Soil Moisture',
-      min: 20,
-      max: 80,
-      unit: '%',
-    ),
-  ];
+  int _shownAlertVersion = 0;
 
-  SensorData? _latest;
-  final MqttSensorService _mqttService = MqttSensorService();
-  StreamSubscription<SensorData>? _mqttSubscription;
-  bool _loading = true;
-  String? _error;
-  int? _lastNotifiedReadingId;
-  String? _lastSystemNotificationKey;
-  DateTime? _lastSystemNotificationAt;
-
-  @override
-  void initState() {
-    super.initState();
-    _connectMqtt();
-  }
-
-  @override
-  void dispose() {
-    _mqttSubscription?.cancel();
-    _mqttService.dispose();
-    super.dispose();
-  }
-
-  Future<void> _connectMqtt() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      await _mqttSubscription?.cancel();
-      await _mqttService.disconnect();
-      _mqttSubscription = _mqttService.readings.listen(
-        _handleReading,
-        onError: (error) {
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _loading = false;
-            _error = error.toString();
-          });
-        },
-      );
-      await _mqttService.connect();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _error = null;
-      });
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
-    }
-  }
-
-  void _handleReading(SensorData reading) {
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _latest = reading;
-      _loading = false;
-      _error = null;
-    });
-    _notifyIfNeeded(reading);
-  }
-
-  void _notifyIfNeeded(SensorData reading) {
-    final alerts = _alertLabels(reading);
-    if (alerts.isEmpty || _lastNotifiedReadingId == reading.id) {
-      return;
-    }
-    _lastNotifiedReadingId = reading.id;
-
+  void _showAlertSnackBar(List<String> alerts) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
@@ -129,48 +33,21 @@ class _SensorsScreenState extends State<SensorsScreen> {
         ),
       ),
     );
-
-    _notifyPhoneIfNeeded(alerts);
-  }
-
-  void _notifyPhoneIfNeeded(List<String> alerts) {
-    final key = alerts.join('|');
-    final now = DateTime.now();
-    final lastAt = _lastSystemNotificationAt;
-    if (_lastSystemNotificationKey == key &&
-        lastAt != null &&
-        now.difference(lastAt) < const Duration(seconds: 60)) {
-      return;
-    }
-
-    _lastSystemNotificationKey = key;
-    _lastSystemNotificationAt = now;
-    NotificationService.showSensorAlert(alerts);
-  }
-
-  List<String> _alertLabels(SensorData reading) {
-    return _thresholds
-        .where(
-          (threshold) =>
-              threshold.isExceeded(_valueFor(reading, threshold.key)),
-        )
-        .map((threshold) => threshold.label)
-        .toList();
-  }
-
-  double? _valueFor(SensorData reading, String key) {
-    return switch (key) {
-      'temperature' => reading.temperature,
-      'humidity' => reading.humidity,
-      'gas' => reading.gasLevel,
-      'soil' => reading.soilMoisture,
-      _ => null,
-    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final reading = _latest;
+    final viewModel = context.watch<SensorViewModel>();
+    if (viewModel.alertVersion != _shownAlertVersion) {
+      _shownAlertVersion = viewModel.alertVersion;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && viewModel.lastAlertLabels.isNotEmpty) {
+          _showAlertSnackBar(viewModel.lastAlertLabels);
+        }
+      });
+    }
+
+    final reading = viewModel.latest;
     final updatedAt = reading == null
         ? 'No data'
         : DateFormat('HH:mm:ss').format(reading.createdAt.toLocal());
@@ -179,25 +56,40 @@ class _SensorsScreenState extends State<SensorsScreen> {
       backgroundColor: const Color(0xFF0D1117),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _connectMqtt,
+          onRefresh: viewModel.connectLiveReadings,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
             children: [
               _Header(
                 updatedAt: updatedAt,
-                hasAlert: reading != null && _alertLabels(reading).isNotEmpty,
+                hasAlert: viewModel.hasAlert,
+                isCached: viewModel.showingCachedData,
               ),
               const SizedBox(height: 18),
-              if (_loading)
+              if (viewModel.loading)
                 const _StatusPanel(text: 'Loading live sensor data...')
-              else if (_error != null)
-                _StatusPanel(text: _error!, isError: true)
+              else if (viewModel.error != null && reading == null)
+                _StatusPanel(text: viewModel.error!, isError: true)
               else if (reading == null)
                 const _StatusPanel(text: 'No sensor reading found.')
               else ...[
-                _DevicePanel(reading: reading),
+                if (viewModel.showingCachedData) ...[
+                  _StatusPanel(
+                    text:
+                        viewModel.error ??
+                        'Showing cached sensor data. Values are not live.',
+                    isWarning: true,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                _DevicePanel(
+                  reading: reading,
+                  isCached: viewModel.showingCachedData,
+                ),
                 const SizedBox(height: 16),
                 _SensorGrid(reading: reading),
+                const SizedBox(height: 16),
+                const _FirestoreAlarmLogPanel(),
               ],
             ],
           ),
@@ -207,11 +99,159 @@ class _SensorsScreenState extends State<SensorsScreen> {
   }
 }
 
+class _FirestoreAlarmLogPanel extends StatelessWidget {
+  const _FirestoreAlarmLogPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<FirebaseAlarmLogViewModel>();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF30363D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.cloud_queue,
+                color: Color(0xFFFFD166),
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Firestore Alarm Logs',
+                  style: GoogleFonts.dmSans(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<SensorAlarmLog>>(
+            stream: viewModel.watchAlarmLogs(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return _FirestoreStatusText(
+                  'Firestore stream error: ${snapshot.error}',
+                  color: const Color(0xFFFFB4B4),
+                );
+              }
+
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const _FirestoreStatusText('Listening snapshots()...');
+              }
+
+              final logs = snapshot.data ?? const [];
+              if (logs.isEmpty) {
+                return const _FirestoreStatusText(
+                  'Alarm log yok. Esik asilinca Firestore kaydi olusacak.',
+                );
+              }
+
+              return Column(
+                children: logs
+                    .take(4)
+                    .map(
+                      (log) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _FirestoreAlarmLogTile(log: log),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FirestoreStatusText extends StatelessWidget {
+  final String text;
+  final Color color;
+
+  const _FirestoreStatusText(
+    this.text, {
+    this.color = const Color(0xFF8B949E),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: GoogleFonts.dmSans(color: color, fontSize: 13));
+  }
+}
+
+class _FirestoreAlarmLogTile extends StatelessWidget {
+  final SensorAlarmLog log;
+
+  const _FirestoreAlarmLogTile({required this.log});
+
+  @override
+  Widget build(BuildContext context) {
+    final time = DateFormat('HH:mm:ss').format(log.createdAt.toLocal());
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.only(top: 7),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF6B6B),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                log.labels.join(', '),
+                style: GoogleFonts.dmSans(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${log.deviceId} - reading #${log.readingId} - $time',
+                style: GoogleFonts.spaceMono(
+                  color: const Color(0xFF8B949E),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
   final String updatedAt;
   final bool hasAlert;
+  final bool isCached;
 
-  const _Header({required this.updatedAt, required this.hasAlert});
+  const _Header({
+    required this.updatedAt,
+    required this.hasAlert,
+    required this.isCached,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -231,9 +271,13 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Direct MQTT feed via HiveMQ',
+                isCached
+                    ? 'Cached SQLite reading - not live'
+                    : 'Direct MQTT feed via HiveMQ',
                 style: GoogleFonts.dmSans(
-                  color: const Color(0xFF8B949E),
+                  color: isCached
+                      ? const Color(0xFFFFD166)
+                      : const Color(0xFF8B949E),
                   fontSize: 13,
                 ),
               ),
@@ -248,14 +292,18 @@ class _Header extends StatelessWidget {
             border: Border.all(
               color: hasAlert
                   ? const Color(0xFFFF6B6B)
+                  : isCached
+                  ? const Color(0xFFFFD166)
                   : const Color(0xFF00D4AA),
             ),
           ),
           child: Text(
-            updatedAt,
+            isCached ? 'CACHED $updatedAt' : updatedAt,
             style: GoogleFonts.spaceMono(
               color: hasAlert
                   ? const Color(0xFFFFB4B4)
+                  : isCached
+                  ? const Color(0xFFFFD166)
                   : const Color(0xFF75E6D0),
               fontSize: 12,
             ),
@@ -268,8 +316,9 @@ class _Header extends StatelessWidget {
 
 class _DevicePanel extends StatelessWidget {
   final SensorData reading;
+  final bool isCached;
 
-  const _DevicePanel({required this.reading});
+  const _DevicePanel({required this.reading, this.isCached = false});
 
   @override
   Widget build(BuildContext context) {
@@ -297,16 +346,24 @@ class _DevicePanel extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Reading #${reading.id}',
+                  isCached
+                      ? 'Cached reading #${reading.id}'
+                      : 'Reading #${reading.id}',
                   style: GoogleFonts.dmSans(
-                    color: const Color(0xFF8B949E),
+                    color: isCached
+                        ? const Color(0xFFFFD166)
+                        : const Color(0xFF8B949E),
                     fontSize: 12,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.circle, color: Color(0xFF00D4AA), size: 10),
+          Icon(
+            Icons.circle,
+            color: isCached ? const Color(0xFFFFD166) : const Color(0xFF00D4AA),
+            size: 10,
+          ),
         ],
       ),
     );
@@ -447,8 +504,13 @@ class _SensorCardData {
 class _StatusPanel extends StatelessWidget {
   final String text;
   final bool isError;
+  final bool isWarning;
 
-  const _StatusPanel({required this.text, this.isError = false});
+  const _StatusPanel({
+    required this.text,
+    this.isError = false,
+    this.isWarning = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -458,13 +520,21 @@ class _StatusPanel extends StatelessWidget {
         color: const Color(0xFF161B22),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isError ? const Color(0xFFFF6B6B) : const Color(0xFF30363D),
+          color: isError
+              ? const Color(0xFFFF6B6B)
+              : isWarning
+              ? const Color(0xFFFFD166)
+              : const Color(0xFF30363D),
         ),
       ),
       child: Text(
         text,
         style: GoogleFonts.dmSans(
-          color: isError ? const Color(0xFFFFB4B4) : const Color(0xFF8B949E),
+          color: isError
+              ? const Color(0xFFFFB4B4)
+              : isWarning
+              ? const Color(0xFFFFD166)
+              : const Color(0xFF8B949E),
           fontSize: 13,
         ),
       ),

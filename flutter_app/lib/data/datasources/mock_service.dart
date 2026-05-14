@@ -16,7 +16,7 @@ class MockService {
     return SensorDataModel(
       id: _idCounter++,
       sensorId: 1,
-      deviceId: 'Ankara-RPi-01',
+      deviceId: 'raspi-home-01',
       sensorName: 'Living Room Sensor',
       sensorType: 'environment',
       temperature: _rndBetween(18, 36),

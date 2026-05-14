@@ -10,12 +10,18 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _authConfirmRedirectUrl = String.fromEnvironment(
+    'AUTH_CONFIRM_REDIRECT_URL',
+    defaultValue: 'smarthome://login-callback',
+  );
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _usernameController = TextEditingController();
   bool _isSignUp = false;
   bool _loading = false;
   String? _error;
+  String? _info;
 
   @override
   void dispose() {
@@ -38,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _info = null;
     });
 
     try {
@@ -46,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final response = await auth.signUp(
           email: email,
           password: password,
+          emailRedirectTo: _authConfirmRedirectUrl,
           data: {'username': username},
         );
         final userId = response.user?.id;
@@ -55,6 +63,10 @@ class _LoginScreenState extends State<LoginScreen> {
             'username': username,
           });
         }
+        setState(() {
+          _info =
+              'Dogrulama e-postasi gonderildi. Maildeki Confirm linkine tikladiktan sonra giris yapabilirsiniz.';
+        });
       } else {
         await auth.signInWithPassword(email: email, password: password);
       }
@@ -139,6 +151,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+                  if (_info != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      _info!,
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF75E6D0),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   FilledButton(
                     style: FilledButton.styleFrom(
@@ -162,6 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         : () => setState(() {
                             _isSignUp = !_isSignUp;
                             _error = null;
+                            _info = null;
                           }),
                     child: Text(
                       _isSignUp ? 'Zaten hesabim var' : 'Yeni hesap olustur',

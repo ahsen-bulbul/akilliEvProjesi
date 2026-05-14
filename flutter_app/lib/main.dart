@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'data/repositories/firebase_auth_repository.dart';
+import 'data/repositories/firebase_event_repository_impl.dart';
+import 'data/repositories/control_repository_impl.dart';
+import 'data/repositories/offline_first_sensor_repository.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/firebase_service.dart';
 import 'presentation/screens/login_screen.dart';
@@ -10,6 +15,11 @@ import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/sensors_screen.dart';
 import 'presentation/screens/control_screen.dart';
 import 'presentation/screens/stats_screen.dart';
+import 'presentation/widgets/offline_banner.dart';
+import 'presentation/viewmodels/auth_view_model.dart';
+import 'presentation/viewmodels/control_view_model.dart';
+import 'presentation/viewmodels/firebase_alarm_log_view_model.dart';
+import 'presentation/viewmodels/sensor_view_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,8 +59,41 @@ class SmartHomeApp extends StatelessWidget {
         textTheme: GoogleFonts.dmSansTextTheme(ThemeData.dark().textTheme),
       ),
       home: isSupabaseConfigured
-          ? const AuthGate()
+          ? const _AppProviders(child: AuthGate())
           : const _SupabaseConfigScreen(),
+    );
+  }
+}
+
+class _AppProviders extends StatelessWidget {
+  final Widget child;
+
+  const _AppProviders({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final firebaseEventRepository = FirebaseEventRepositoryImpl();
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => AuthViewModel(FirebaseAuthRepository())
+            ..ensureAnonymousSession(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => FirebaseAlarmLogViewModel(firebaseEventRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => SensorViewModel(
+            OfflineFirstSensorRepository(),
+            eventRepository: firebaseEventRepository,
+          )..connectLiveReadings(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              ControlViewModel(ControlRepositoryImpl())..loadControlData(),
+        ),
+      ],
+      child: child,
     );
   }
 }
@@ -103,18 +146,18 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    SensorsScreen(),
-    ControlScreen(),
-    StatsScreen(),
-    CameraScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      HomeScreen(onQuickAccessSelected: _selectTab),
+      const SensorsScreen(),
+      const ControlScreen(),
+      const StatsScreen(),
+      const CameraScreen(),
+    ];
+
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: OfflineBanner(child: screens[_currentIndex]),
       floatingActionButton: FloatingActionButton.small(
         tooltip: 'Cikis yap',
         backgroundColor: const Color(0xFF161B22),
@@ -156,5 +199,9 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
     );
+  }
+
+  void _selectTab(int index) {
+    setState(() => _currentIndex = index);
   }
 }

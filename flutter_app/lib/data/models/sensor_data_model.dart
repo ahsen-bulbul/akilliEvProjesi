@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../domain/entities/sensor_data.dart';
 
 class SensorDataModel extends SensorData {
@@ -78,5 +80,99 @@ class SensorDataModel extends SensorData {
           ? DateTime.parse(json['created_at'])
           : now,
     );
+  }
+
+  factory SensorDataModel.fromEntity(SensorData data) {
+    if (data is SensorDataModel) {
+      return data;
+    }
+    return SensorDataModel(
+      id: data.id,
+      sensorId: data.sensorId,
+      deviceId: data.deviceId,
+      sensorName: data.sensorName,
+      sensorType: data.sensorType,
+      temperature: data.temperature,
+      humidity: data.humidity,
+      gasLevel: data.gasLevel,
+      lightLevel: data.lightLevel,
+      distanceCm: data.distanceCm,
+      soilRaw: data.soilRaw,
+      soilMoisture: data.soilMoisture,
+      motionDetected: data.motionDetected,
+      buzzer: data.buzzer,
+      accelerometer: data.accelerometer,
+      gyroscope: data.gyroscope,
+      createdAt: data.createdAt,
+    );
+  }
+
+  factory SensorDataModel.fromCacheMap(Map<String, Object?> map) {
+    Map<String, double>? decodeVector(Object? value) {
+      if (value is! String || value.isEmpty) {
+        return null;
+      }
+      final decoded = jsonDecode(value) as Map<String, dynamic>;
+      return decoded.map(
+        (key, item) => MapEntry(key, (item as num).toDouble()),
+      );
+    }
+
+    return SensorDataModel(
+      id: map['id'] as int,
+      sensorId: map['sensor_id'] as int,
+      deviceId: map['device_id'] as String,
+      sensorName: map['sensor_name'] as String?,
+      sensorType: map['sensor_type'] as String?,
+      temperature: (map['temperature'] as num?)?.toDouble(),
+      humidity: (map['humidity'] as num?)?.toDouble(),
+      gasLevel: (map['gas_level'] as num?)?.toDouble(),
+      lightLevel: (map['light_level'] as num?)?.toDouble(),
+      distanceCm: (map['distance_cm'] as num?)?.toDouble(),
+      soilRaw: (map['soil_raw'] as num?)?.toDouble(),
+      soilMoisture: (map['soil_moisture'] as num?)?.toDouble(),
+      motionDetected: _boolFromCache(map['motion_detected']),
+      buzzer: _boolFromCache(map['buzzer']),
+      accelerometer: decodeVector(map['accelerometer']),
+      gyroscope: decodeVector(map['gyroscope']),
+      createdAt: DateTime.parse(map['created_at'] as String),
+    );
+  }
+
+  Map<String, Object?> toCacheMap() {
+    return {
+      'id': id,
+      'sensor_id': sensorId,
+      'device_id': deviceId,
+      'sensor_name': sensorName,
+      'sensor_type': sensorType,
+      'temperature': temperature,
+      'humidity': humidity,
+      'gas_level': gasLevel,
+      'light_level': lightLevel,
+      'distance_cm': distanceCm,
+      'soil_raw': soilRaw,
+      'soil_moisture': soilMoisture,
+      'motion_detected': _boolToCache(motionDetected),
+      'buzzer': _boolToCache(buzzer),
+      'accelerometer': accelerometer == null ? null : jsonEncode(accelerometer),
+      'gyroscope': gyroscope == null ? null : jsonEncode(gyroscope),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'cached_at': DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
+  static bool? _boolFromCache(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    return value == 1;
+  }
+
+  static int? _boolToCache(bool? value) {
+    if (value == null) {
+      return null;
+    }
+    return value ? 1 : 0;
   }
 }

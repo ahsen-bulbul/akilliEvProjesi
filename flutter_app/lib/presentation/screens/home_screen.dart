@@ -1,46 +1,76 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+
+import '../../data/datasources/api_service.dart';
+import '../viewmodels/sensor_view_model.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final ValueChanged<int>? onQuickAccessSelected;
+
+  const HomeScreen({super.key, this.onQuickAccessSelected});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  double _temperature = 22.5;
-  double _humidity = 65.0;
-  double _airFlow = 12.0;
-  Timer? _timer;
-  final _rnd = Random();
+  WeatherData? _weather;
+  bool _isWeatherLoading = true;
+  String? _weatherError;
+  Timer? _weatherTimer;
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
-    _startMockUpdates();
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _startMockUpdates() {
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      setState(() {
-        _temperature = 18 + _rnd.nextDouble() * 18;
-        _humidity = 30 + _rnd.nextDouble() * 55;
-        _airFlow = 5 + _rnd.nextDouble() * 20;
-      });
+    _loadWeather();
+    _weatherTimer = Timer.periodic(
+      const Duration(minutes: 10),
+      (_) => _loadWeather(),
+    );
+    _statusTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() {});
     });
   }
 
   @override
+  void dispose() {
+    _weatherTimer?.cancel();
+    _statusTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadWeather() async {
+    if (_weather == null) {
+      setState(() {
+        _isWeatherLoading = true;
+        _weatherError = null;
+      });
+    }
+
+    try {
+      final weather = await ApiService.getCurrentWeather();
+      if (!mounted) return;
+      setState(() {
+        _weather = weather;
+        _isWeatherLoading = false;
+        _weatherError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isWeatherLoading = false;
+        _weatherError = 'Hava durumu alinamadi';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final sensorViewModel = context.watch<SensorViewModel>();
+    final raspberryStatus = _raspberryStatus(sensorViewModel);
     final now = DateTime.now();
     final weekdays = [
       'Monday',
@@ -203,12 +233,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
-                        const Text('☀️', style: TextStyle(fontSize: 28)),
+                        Text(
+                          _weatherIcon(_weather),
+                          style: const TextStyle(fontSize: 28),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Indoor · Living Room',
+                      _weather == null
+                          ? 'Ev konumu'
+                          : 'Ev konumu · ${_weather!.location}',
                       style: GoogleFonts.dmSans(
                         color: const Color(0xFF8B949E),
                         fontSize: 13,
@@ -218,14 +253,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          _temperature.toStringAsFixed(1),
-                          style: GoogleFonts.spaceMono(
-                            color: Colors.white,
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
+                        if (_isWeatherLoading)
+                          const SizedBox(
+                            width: 34,
+                            height: 34,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Color(0xFF00D4AA),
+                            ),
+                          )
+                        else
+                          Text(
+                            _weather?.temperature.toStringAsFixed(1) ?? '--',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white,
+                              fontSize: 48,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
                         const Padding(
                           padding: EdgeInsets.only(bottom: 8),
                           child: Text(
@@ -239,28 +284,37 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     Text(
-                      'Partly Cloudy · Outdoor ${(_temperature - 4).toStringAsFixed(0)}°C',
+                      _weatherSubtitle,
                       style: GoogleFonts.dmSans(
                         color: const Color(0xFF8B949E),
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
+                    Wrap(
+                      spacing: 24,
+                      runSpacing: 12,
                       children: [
                         _weatherStat(
                           '💧',
                           'Humidity',
-                          '${_humidity.toStringAsFixed(0)}%',
+                          _formatPercent(_weather?.humidity),
                         ),
-                        const SizedBox(width: 24),
                         _weatherStat(
                           '💨',
-                          'Air Flow',
-                          '${_airFlow.toStringAsFixed(0)} km/h',
+                          'Wind',
+                          _formatSpeed(_weather?.windSpeed),
                         ),
-                        const SizedBox(width: 24),
-                        _weatherStat('☀️', 'UV Index', 'Low'),
+                        _weatherStat(
+                          '🌡️',
+                          'Feels Like',
+                          _formatTemperature(_weather?.apparentTemperature),
+                        ),
+                        _weatherStat(
+                          '☀️',
+                          'UV Max',
+                          _formatUv(_weather?.uvIndex),
+                        ),
                       ],
                     ),
                   ],
@@ -282,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Text(
-                    '3 Sections',
+                    '4 Sections',
                     style: GoogleFonts.dmSans(
                       color: const Color(0xFF00D4AA),
                       fontSize: 13,
@@ -296,8 +350,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.sensors,
                 color: const Color(0xFF00D4AA),
                 title: 'Live Sensors',
-                subtitle: 'MQTT real-time data',
-                onTap: () {},
+                subtitle: 'MQTT stream and latest values',
+                onTap: () => widget.onQuickAccessSelected?.call(1),
               ),
               const SizedBox(height: 10),
               _quickAccessCard(
@@ -305,15 +359,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: const Color(0xFF9B59B6),
                 title: 'Device Control',
                 subtitle: 'Lamp, Fan, AC',
-                onTap: () {},
+                onTap: () => widget.onQuickAccessSelected?.call(2),
               ),
               const SizedBox(height: 10),
               _quickAccessCard(
                 icon: Icons.bar_chart,
                 color: const Color(0xFF3498DB),
                 title: 'Statistics',
-                subtitle: 'PostgreSQL history',
-                onTap: () {},
+                subtitle: 'Sensor history and trends',
+                onTap: () => widget.onQuickAccessSelected?.call(3),
+              ),
+              const SizedBox(height: 10),
+              _quickAccessCard(
+                icon: Icons.videocam,
+                color: const Color(0xFFE67E22),
+                title: 'Cameras',
+                subtitle: 'Security camera feeds',
+                onTap: () => widget.onQuickAccessSelected?.call(4),
               ),
 
               const SizedBox(height: 24),
@@ -343,40 +405,44 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'raspi-home-01',
-                          style: GoogleFonts.spaceMono(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'raspi-home-01',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        Text(
-                          'Mock mode · Supabase connected',
-                          style: GoogleFonts.dmSans(
-                            color: const Color(0xFF8B949E),
-                            fontSize: 12,
+                          Text(
+                            raspberryStatus.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              color: const Color(0xFF8B949E),
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00D4AA).withValues(alpha: 0.1),
+                        color: raspberryStatus.color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'Online',
+                        raspberryStatus.label,
                         style: GoogleFonts.dmSans(
-                          color: const Color(0xFF00D4AA),
+                          color: raspberryStatus.color,
                           fontSize: 12,
                         ),
                       ),
@@ -391,6 +457,97 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  _RaspberryStatus _raspberryStatus(SensorViewModel viewModel) {
+    final latest = viewModel.latest;
+    if (viewModel.loading && latest == null) {
+      return const _RaspberryStatus(
+        label: 'Waiting',
+        subtitle: 'MQTT live data bekleniyor',
+        color: Color(0xFFFFB020),
+      );
+    }
+
+    if (latest == null) {
+      return const _RaspberryStatus(
+        label: 'Offline',
+        subtitle: 'MQTT verisi alinmadi',
+        color: Color(0xFFE74C3C),
+      );
+    }
+
+    if (viewModel.showingCachedData) {
+      return _RaspberryStatus(
+        label: 'Cached',
+        subtitle: 'Canli MQTT yok · Son veri ${_timeAgo(latest.createdAt)}',
+        color: const Color(0xFFFFB020),
+      );
+    }
+
+    final age = DateTime.now().difference(latest.createdAt.toLocal());
+    if (age <= const Duration(seconds: 30)) {
+      return _RaspberryStatus(
+        label: 'Online',
+        subtitle: 'Canli MQTT · Son veri ${_timeAgo(latest.createdAt)}',
+        color: const Color(0xFF00D4AA),
+      );
+    }
+
+    return _RaspberryStatus(
+      label: 'Offline',
+      subtitle: 'MQTT akisi durdu · Son veri ${_timeAgo(latest.createdAt)}',
+      color: const Color(0xFFE74C3C),
+    );
+  }
+
+  String _timeAgo(DateTime value) {
+    final age = DateTime.now().difference(value.toLocal());
+    if (age.inSeconds < 5) return 'simdi';
+    if (age.inSeconds < 60) return '${age.inSeconds} sn once';
+    if (age.inMinutes < 60) return '${age.inMinutes} dk once';
+    if (age.inHours < 24) return '${age.inHours} sa once';
+    return '${age.inDays} gun once';
+  }
+
+  String get _weatherSubtitle {
+    if (_weatherError != null) return _weatherError!;
+    final weather = _weather;
+    if (weather == null) return 'Gercek hava durumu yukleniyor';
+    final feelsLike = weather.apparentTemperature == null
+        ? null
+        : 'Hissedilen ${weather.apparentTemperature!.toStringAsFixed(0)}°C';
+    return [weather.condition, feelsLike].whereType<String>().join(' · ');
+  }
+
+  String _formatPercent(double? value) {
+    return value == null ? '--' : '${value.toStringAsFixed(0)}%';
+  }
+
+  String _formatSpeed(double? value) {
+    return value == null ? '--' : '${value.toStringAsFixed(0)} km/h';
+  }
+
+  String _formatTemperature(double? value) {
+    return value == null ? '--' : '${value.toStringAsFixed(0)}°C';
+  }
+
+  String _formatUv(double? value) {
+    if (value == null) return '--';
+    return value.toStringAsFixed(1);
+  }
+
+  String _weatherIcon(WeatherData? weather) {
+    final code = weather?.weatherCode;
+    if (code == null) return '☁️';
+    if (code == 0) return weather?.isDay == false ? '🌙' : '☀️';
+    if ({1, 2, 3, 45, 48}.contains(code)) return '☁️';
+    if ({51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82}.contains(code)) {
+      return '🌧️';
+    }
+    if ({71, 73, 75, 77, 85, 86}.contains(code)) return '❄️';
+    if ({95, 96, 99}.contains(code)) return '⛈️';
+    return '🌤️';
   }
 
   Widget _weatherStat(String emoji, String label, String value) {
@@ -478,4 +635,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _RaspberryStatus {
+  final String label;
+  final String subtitle;
+  final Color color;
+
+  const _RaspberryStatus({
+    required this.label,
+    required this.subtitle,
+    required this.color,
+  });
 }

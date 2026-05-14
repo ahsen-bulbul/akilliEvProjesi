@@ -74,3 +74,15 @@ class FCMTokenOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+class WeatherOut(BaseModel):
+    location: str
+    temperature: float
+    apparent_temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    wind_speed: Optional[float] = None
+    uv_index: Optional[float] = None
+    condition: str
+    weather_code: Optional[int] = None
+    is_day: Optional[bool] = None
+    observed_at: Optional[str] = None
