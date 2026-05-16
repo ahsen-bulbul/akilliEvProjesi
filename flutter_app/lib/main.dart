@@ -12,6 +12,7 @@ import 'data/services/notification_service.dart';
 import 'data/services/firebase_service.dart';
 import 'presentation/screens/admin_screen.dart';
 import 'presentation/screens/login_screen.dart';
+import 'presentation/screens/reset_password_screen.dart';
 import 'presentation/screens/camera_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/sensors_screen.dart';
@@ -110,6 +111,10 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
+        if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+          return const ResetPasswordScreen();
+        }
+
         final session = Supabase.instance.client.auth.currentSession;
         if (session == null) {
           return const LoginScreen();

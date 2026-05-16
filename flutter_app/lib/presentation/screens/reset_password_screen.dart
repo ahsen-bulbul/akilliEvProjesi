@@ -2,46 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class ResetPasswordScreen extends StatefulWidget {
+  const ResetPasswordScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  static const _authConfirmRedirectUrl = String.fromEnvironment(
-    'AUTH_CONFIRM_REDIRECT_URL',
-    defaultValue: 'smarthome://login-callback',
-  );
-  static const _passwordResetRedirectUrl = String.fromEnvironment(
-    'PASSWORD_RESET_REDIRECT_URL',
-    defaultValue: 'smarthome://login-callback',
-  );
-
-  final _emailController = TextEditingController();
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _passwordController = TextEditingController();
-  final _usernameController = TextEditingController();
-  bool _isSignUp = false;
+  final _confirmPasswordController = TextEditingController();
   bool _loading = false;
   String? _error;
   String? _info;
 
   @override
   void dispose() {
-    _emailController.dispose();
     _passwordController.dispose();
-    _usernameController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final email = _emailController.text.trim();
+  Future<void> _updatePassword() async {
     final password = _passwordController.text;
-    final username = _usernameController.text.trim();
+    final confirmPassword = _confirmPasswordController.text;
 
-    if (email.isEmpty || password.isEmpty || (_isSignUp && username.isEmpty)) {
-      setState(() => _error = 'Tum alanlari doldurun.');
+    if (password.length < 6) {
+      setState(() => _error = 'Sifre en az 6 karakter olmali.');
+      return;
+    }
+    if (password != confirmPassword) {
+      setState(() => _error = 'Sifreler eslesmiyor.');
       return;
     }
 
@@ -52,60 +43,12 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final auth = Supabase.instance.client.auth;
-      if (_isSignUp) {
-        final response = await auth.signUp(
-          email: email,
-          password: password,
-          emailRedirectTo: _authConfirmRedirectUrl,
-          data: {'username': username},
-        );
-        final userId = response.user?.id;
-        if (userId != null) {
-          await Supabase.instance.client.from('profiles').upsert({
-            'id': userId,
-            'username': username,
-          });
-        }
-        setState(() {
-          _info =
-              'Dogrulama e-postasi gonderildi. Maildeki Confirm linkine tikladiktan sonra giris yapabilirsiniz.';
-        });
-      } else {
-        await auth.signInWithPassword(email: email, password: password);
-      }
-    } on AuthException catch (e) {
-      setState(() => _error = e.message);
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  Future<void> _sendPasswordResetEmail() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      setState(() => _error = 'Sifre sifirlama icin e-posta adresinizi girin.');
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-      _info = null;
-    });
-
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: _passwordResetRedirectUrl,
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: password),
       );
+      await Supabase.instance.client.auth.signOut();
       setState(() {
-        _info =
-            'Sifre sifirlama baglantisi e-postanıza gonderildi. Maildeki linke tiklayinca uygulamada yeni sifre ekrani acilacak.';
+        _info = 'Sifreniz guncellendi. Yeni sifrenizle giris yapabilirsiniz.';
       });
     } on AuthException catch (e) {
       setState(() => _error = e.message);
@@ -132,13 +75,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(
-                    Icons.home_work_outlined,
+                    Icons.lock_reset,
                     color: Color(0xFF00D4AA),
-                    size: 48,
+                    size: 52,
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    _isSignUp ? 'Hesap Olustur' : 'Giris Yap',
+                    'Yeni Sifre',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.dmSans(
                       color: Colors.white,
@@ -148,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Smart Home paneline devam edin',
+                    'Hesabiniz icin yeni sifre belirleyin',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.dmSans(
                       color: const Color(0xFF8B949E),
@@ -156,38 +99,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
-                  if (_isSignUp) ...[
-                    _LoginField(
-                      controller: _usernameController,
-                      label: 'Kullanici adi',
-                      icon: Icons.person_outline,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  _LoginField(
-                    controller: _emailController,
-                    label: 'E-posta',
-                    icon: Icons.mail_outline,
-                    keyboardType: TextInputType.emailAddress,
+                  _ResetField(
+                    controller: _passwordController,
+                    label: 'Yeni sifre',
+                    icon: Icons.lock_outline,
+                    onSubmitted: (_) => _updatePassword(),
                   ),
                   const SizedBox(height: 12),
-                  _LoginField(
-                    controller: _passwordController,
-                    label: 'Sifre',
-                    icon: Icons.lock_outline,
-                    obscureText: true,
-                    onSubmitted: (_) => _submit(),
+                  _ResetField(
+                    controller: _confirmPasswordController,
+                    label: 'Yeni sifre tekrar',
+                    icon: Icons.lock_reset,
+                    onSubmitted: (_) => _updatePassword(),
                   ),
-                  if (!_isSignUp) ...[
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _loading ? null : _sendPasswordResetEmail,
-                        child: const Text('Sifremi unuttum'),
-                      ),
-                    ),
-                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 14),
                     Text(
@@ -215,27 +139,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       foregroundColor: const Color(0xFF0D1117),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    onPressed: _loading ? null : _submit,
+                    onPressed: _loading ? null : _updatePassword,
                     child: _loading
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(_isSignUp ? 'Kayit Ol' : 'Giris Yap'),
+                        : const Text('Sifreyi Guncelle'),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _loading
                         ? null
-                        : () => setState(() {
-                            _isSignUp = !_isSignUp;
-                            _error = null;
-                            _info = null;
-                          }),
-                    child: Text(
-                      _isSignUp ? 'Zaten hesabim var' : 'Yeni hesap olustur',
-                    ),
+                        : () => Supabase.instance.client.auth.signOut(),
+                    child: const Text('Giris ekranina don'),
                   ),
                 ],
               ),
@@ -247,20 +165,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _LoginField extends StatelessWidget {
+class _ResetField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final IconData icon;
-  final bool obscureText;
-  final TextInputType? keyboardType;
   final ValueChanged<String>? onSubmitted;
 
-  const _LoginField({
+  const _ResetField({
     required this.controller,
     required this.label,
     required this.icon,
-    this.obscureText = false,
-    this.keyboardType,
     this.onSubmitted,
   });
 
@@ -268,8 +182,7 @@ class _LoginField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
+      obscureText: true,
       onSubmitted: onSubmitted,
       decoration: InputDecoration(
         labelText: label,
