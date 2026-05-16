@@ -62,6 +62,23 @@ class ControlCommand(BaseModel):
     value: Optional[str] = None
 
 
+class ChatMessageCreate(BaseModel):
+    text: str
+    target_user_id: Optional[UUID] = None
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    user_id: UUID
+    sender_id: UUID
+    receiver_id: Optional[UUID] = None
+    text: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class FCMTokenIn(BaseModel):
     token: str
 

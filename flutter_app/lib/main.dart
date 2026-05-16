@@ -12,7 +12,9 @@ import 'data/services/notification_service.dart';
 import 'data/services/firebase_service.dart';
 import 'presentation/screens/admin_screen.dart';
 import 'presentation/screens/login_screen.dart';
+import 'presentation/screens/reset_password_screen.dart';
 import 'presentation/screens/camera_screen.dart';
+import 'presentation/screens/chat_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/sensors_screen.dart';
 import 'presentation/screens/control_screen.dart';
@@ -79,8 +81,8 @@ class _AppProviders extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AuthViewModel(FirebaseAuthRepository())
-            ..ensureAnonymousSession(),
+          create: (_) =>
+              AuthViewModel(FirebaseAuthRepository())..ensureAnonymousSession(),
         ),
         ChangeNotifierProvider(
           create: (_) => FirebaseAlarmLogViewModel(firebaseEventRepository),
@@ -110,6 +112,10 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
+        if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+          return const ResetPasswordScreen();
+        }
+
         final session = Supabase.instance.client.auth.currentSession;
         if (session == null) {
           return const LoginScreen();
@@ -235,12 +241,31 @@ class _MainScreenState extends State<MainScreen> {
 
     return Scaffold(
       body: OfflineBanner(child: screens[_currentIndex]),
-      floatingActionButton: FloatingActionButton.small(
-        tooltip: 'Cikis yap',
-        backgroundColor: const Color(0xFF161B22),
-        foregroundColor: const Color(0xFF00D4AA),
-        onPressed: () => Supabase.instance.client.auth.signOut(),
-        child: const Icon(Icons.logout),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: 'main_chat_fab',
+            tooltip: 'Destek mesaji',
+            backgroundColor: const Color(0xFF00D4AA),
+            foregroundColor: const Color(0xFF06130F),
+            onPressed: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ChatScreen()));
+            },
+            child: const Icon(Icons.chat),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.small(
+            heroTag: 'main_logout_fab',
+            tooltip: 'Cikis yap',
+            backgroundColor: const Color(0xFF161B22),
+            foregroundColor: const Color(0xFF00D4AA),
+            onPressed: () => Supabase.instance.client.auth.signOut(),
+            child: const Icon(Icons.logout),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF161B22),

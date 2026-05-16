@@ -90,6 +90,17 @@ class DeviceControl(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    sender_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    receiver_id = Column(UUID(as_uuid=True), index=True, nullable=True)
+    text = Column(String(1000), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class FCMToken(Base):
     __tablename__ = "fcm_tokens"
 

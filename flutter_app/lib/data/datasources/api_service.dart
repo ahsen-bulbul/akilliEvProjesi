@@ -7,6 +7,7 @@ import '../../config/api_config.dart';
 import '../../domain/entities/control_device.dart';
 import '../../domain/entities/control_room.dart';
 import '../../domain/entities/sensor_data.dart';
+import '../models/message.dart';
 import '../models/sensor_data_model.dart';
 
 class AppUser {
@@ -250,6 +251,34 @@ class ApiService {
     throw Exception(_errorMessage('Odalar alinamadi', response));
   }
 
+  static Future<List<Message>> getChatMessages({String? targetUserId}) async {
+    final query = targetUserId == null ? '' : '?target_user_id=$targetUserId';
+    final response = await http.get(
+      Uri.parse('$baseUrl/chat/messages$query'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => Message.fromJson(e)).toList();
+    }
+    throw Exception(_errorMessage('Mesajlar alinamadi', response));
+  }
+
+  static Future<Message> sendChatMessage({
+    required String text,
+    String? targetUserId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chat/messages'),
+      headers: _headers,
+      body: jsonEncode({'text': text, 'target_user_id': targetUserId}),
+    );
+    if (response.statusCode == 200) {
+      return Message.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Mesaj gonderilemedi', response));
+  }
+
   static Future<ControlRoom> createAdminRoom({
     required String targetUserId,
     required String name,
@@ -328,7 +357,9 @@ class ApiService {
     required int deviceId,
   }) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/admin/devices/$deviceId?target_user_id=$targetUserId'),
+      Uri.parse(
+        '$baseUrl/admin/devices/$deviceId?target_user_id=$targetUserId',
+      ),
       headers: _headers,
     );
     if (response.statusCode >= 400) {
@@ -341,7 +372,9 @@ class ApiService {
     required int sensorId,
   }) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/admin/sensors/$sensorId?target_user_id=$targetUserId'),
+      Uri.parse(
+        '$baseUrl/admin/sensors/$sensorId?target_user_id=$targetUserId',
+      ),
       headers: _headers,
     );
     if (response.statusCode >= 400) {

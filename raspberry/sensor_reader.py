@@ -1,12 +1,12 @@
 import json
-import os
-import random
-import re
-import ssl
-import time
+import os   #ortam değişkenlerini okur
+import random   #mock veri üretir 
+import re     #metinden sayı çeker(regex)
+import ssl     #güvenli bağlantı için 
+import time    #bekleme/gecikme için 
 
-import paho.mqtt.client as mqtt
-import serial
+import paho.mqtt.client as mqtt #MQTT protokolüyle mesaj göndermek için dış kütüphane 
+import serial    # Arduino/sensörle seri port üzerinde iletişim için 
 
 
 def load_env_file(path=".env"):
@@ -24,29 +24,29 @@ def load_env_file(path=".env"):
 
 load_env_file()
 
-MQTT_BROKER = os.getenv("MQTT_BROKER", "")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
-MQTT_TOPIC = os.getenv("MQTT_TOPIC", "home/sensor/all")
-MQTT_TLS = os.getenv("MQTT_TLS", "1") == "1"
-DEVICE_ID = os.getenv("DEVICE_ID", "Ankara-RPi-01")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "")     #sunucu adresi 
+MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))     #port numarası 
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")        #giriş bilgileri
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")        #  ''     ''
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "home/sensor/all")     #mesaj kanalı
+MQTT_TLS = os.getenv("MQTT_TLS", "1") == "1"        #şifreli bağlantı(açık)
+DEVICE_ID = os.getenv("DEVICE_ID", "Ankara-RPi-01")      #cihaz adı
 SENSOR_ID = os.getenv("SENSOR_ID")
-SENSOR_SOURCE = os.getenv("SENSOR_SOURCE", "mock").lower()
-SERIAL_PORT = os.getenv("SERIAL_PORT", "/dev/ttyUSB0")
-SERIAL_BAUD = int(os.getenv("SERIAL_BAUD", "9600"))
+SENSOR_SOURCE = os.getenv("SENSOR_SOURCE", "mock").lower()    #veri kaynağı
+SERIAL_PORT = os.getenv("SERIAL_PORT", "/dev/ttyUSB0")        #arduino portu 
+SERIAL_BAUD = int(os.getenv("SERIAL_BAUD", "9600"))           
 SERIAL_TIMEOUT = float(os.getenv("SERIAL_TIMEOUT", "2"))
-PUBLISH_INTERVAL = float(os.getenv("PUBLISH_INTERVAL", "5"))
+PUBLISH_INTERVAL = float(os.getenv("PUBLISH_INTERVAL", "5"))     #gönderim sıklığı
 SERIAL_FORMAT = os.getenv("SERIAL_FORMAT", "arduino_text").lower()
 
-
-def with_common_fields(data):
+#her veriye device_id ve sensor_id ekler 
+def with_common_fields(data):      
     data.setdefault("device_id", DEVICE_ID)
     if SENSOR_ID and "sensor_id" not in data:
         data["sensor_id"] = int(SENSOR_ID)
     return data
 
-
+#gerçek sensör olmadığında rastgele veri üretir 
 def read_mock_sensor_data():
     return with_common_fields({
         "device_id": DEVICE_ID,
@@ -57,36 +57,40 @@ def read_mock_sensor_data():
         "distance_cm": round(random.uniform(5, 200), 2),
     })
 
-
+#arduinoya bağlanır 
 class SerialSensorReader:
     def __init__(self, port, baud, timeout):
         self.port = port
         self.baud = baud
         self.timeout = timeout
         self.serial = serial.Serial(port, baud, timeout=timeout)
-        time.sleep(2)
+        time.sleep(2)      #bağlanmak için 2 sn bekler 
+
 
     def read(self):
         if SERIAL_FORMAT == "json":
-            return self._read_json_line()
-        if SERIAL_FORMAT == "arduino_text":
-            return self._read_arduino_text_block()
-        raise ValueError("SERIAL_FORMAT json veya arduino_text olmali")
+            return self._read_json_line()      # Json moduysa bunu çalıştır
+        if SERIAL_FORMAT == "arduino_text":     
+            return self._read_arduino_text_block()     #arduino_text moduysa bunu çalıştır 
+        raise ValueError("SERIAL_FORMAT json veya arduino_text olmali")    #ikiside değilse hata fırlat
+    # .env dosyasındaki ayara bakarak hangi okuma fonksiyonu çağıracağına karar verir.
+    # raise ValueError ise geçersiz bir format girilirse programı durdurup hata mesajı verir 
+
 
     def _read_json_line(self):
-        while True:
-            line = self.serial.readline().decode("utf-8", errors="replace").strip()
-            if not line:
+        while True:    #sürekli dinle
+            line = self.serial.readline().decode("utf-8", errors="replace").strip()  #arduino'dan 1 satır oku, byte->string'e çevir, baş ve sondaki boşlukları sil
+            if not line:          #boş satırsa atla 
                 continue
             try:
-                data = json.loads(line)
+                data = json.loads(line)       #satırı JSON'a parse et
             except json.JSONDecodeError as exc:
                 print(f"[SERIAL] Gecersiz JSON atlandi: {line} ({exc})")
-                continue
+                continue                      #hatalı satırı atla, çökme 
             if not isinstance(data, dict):
                 print(f"[SERIAL] JSON obje degil, atlandi: {line}")
-                continue
-            return with_common_fields(data)
+                continue             #liste/sayı geldiyse atla 
+            return with_common_fields(data)        #geçerliyse döndür 
 
     def _read_arduino_text_block(self):
         block = []
@@ -98,20 +102,20 @@ class SerialSensorReader:
                 continue
 
             if line.startswith("========== SISTEM VERILERI"):
-                block = []
-                in_block = True
+                block = []          #önceki yarım bloğu sıfırla 
+                in_block = True      #toplamaya başla 
                 continue
 
             if in_block and line.startswith("====================================="):
-                data = parse_arduino_text_block(block)
+                data = parse_arduino_text_block(block)    #blok bitti, parse et
                 if data:
                     return with_common_fields(data)
-                in_block = False
+                in_block = False      #boş geldiyse sıfırla
                 block = []
                 continue
 
             if in_block:
-                block.append(line)
+                block.append(line)    #blok içindeysen satırı biriktir
 
     def close(self):
         self.serial.close()

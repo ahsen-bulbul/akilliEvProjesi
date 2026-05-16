@@ -34,7 +34,12 @@ def _get_auth_payload(authorization: Optional[str]) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Oturum gerekli")
 
-    token = authorization.removeprefix("Bearer ").strip()
+    # Python 3.8 uyumlu güvenli kesme işlemi
+    if authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    else:
+        token = authorization.strip()
+        
     parts = token.split(".")
     if len(parts) != 3:
         raise HTTPException(status_code=401, detail="Gecersiz token")
@@ -401,6 +406,15 @@ def _validate_room_for_user(
         raise HTTPException(status_code=404, detail="Oda bu kullaniciya ait degil")
 
 
+def _get_first_admin(db: Session) -> Optional[models.User]:
+    return (
+        db.query(models.User)
+        .filter(models.User.is_admin.is_(True))
+        .order_by(models.User.created_at.asc())
+        .first()
+    )
+
+
 @app.get("/me", response_model=schemas.UserOut)
 def get_me(
     claims: dict = Depends(get_current_user_claims),
@@ -412,6 +426,63 @@ def get_me(
         email=claims.get("email"),
     )
     return user
+
+
+@app.get("/chat/messages", response_model=List[schemas.ChatMessageOut])
+def list_chat_messages(
+    target_user_id: Optional[UUID] = None,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    current_user = _get_or_create_user(db, user_id)
+    conversation_user_id = user_id
+
+    if current_user.is_admin:
+        if target_user_id is None:
+            raise HTTPException(status_code=400, detail="Hedef kullanici gerekli")
+        _get_target_user(db, target_user_id)
+        conversation_user_id = target_user_id
+
+    return (
+        db.query(models.ChatMessage)
+        .filter(models.ChatMessage.user_id == conversation_user_id)
+        .order_by(models.ChatMessage.created_at.asc(), models.ChatMessage.id.asc())
+        .all()
+    )
+
+
+@app.post("/chat/messages", response_model=schemas.ChatMessageOut)
+def create_chat_message(
+    payload: schemas.ChatMessageCreate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    current_user = _get_or_create_user(db, user_id)
+    clean_text = payload.text.strip()
+    if not clean_text:
+        raise HTTPException(status_code=400, detail="Mesaj bos olamaz")
+
+    if current_user.is_admin:
+        if payload.target_user_id is None:
+            raise HTTPException(status_code=400, detail="Hedef kullanici gerekli")
+        target_user = _get_target_user(db, payload.target_user_id)
+        conversation_user_id = target_user.id
+        receiver_id = target_user.id
+    else:
+        admin_user = _get_first_admin(db)
+        conversation_user_id = user_id
+        receiver_id = admin_user.id if admin_user else None
+
+    message = models.ChatMessage(
+        user_id=conversation_user_id,
+        sender_id=user_id,
+        receiver_id=receiver_id,
+        text=clean_text,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
 
 
 @app.get("/admin/users", response_model=List[schemas.UserOut])
@@ -460,6 +531,9 @@ def delete_user(
 
     db.query(models.DeviceControl).filter(
         models.DeviceControl.user_id == target_user_id
+    ).delete(synchronize_session=False)
+    db.query(models.ChatMessage).filter(
+        models.ChatMessage.user_id == target_user_id
     ).delete(synchronize_session=False)
     db.query(models.Device).filter(
         models.Device.user_id == target_user_id

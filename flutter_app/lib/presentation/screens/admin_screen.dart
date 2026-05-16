@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/control_device.dart';
 import '../../domain/entities/control_room.dart';
 import '../viewmodels/admin_view_model.dart';
+import 'chat_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -37,6 +38,31 @@ class _AdminScreenState extends State<AdminScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'admin_chat_fab',
+        tooltip: 'Kullanici mesajlari',
+        backgroundColor: const Color(0xFF00D4AA),
+        foregroundColor: const Color(0xFF06130F),
+        onPressed: () {
+          final selectedUser = viewModel.selectedUser;
+          if (selectedUser == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Once bir kullanici secin.')),
+            );
+            return;
+          }
+
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ChatScreen(
+                targetUserId: selectedUser.id,
+                title: 'Destek: ${selectedUser.displayName}',
+              ),
+            ),
+          );
+        },
+        child: const Icon(Icons.chat),
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: viewModel.loadUsers,
@@ -537,10 +563,7 @@ class _RoomsSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.meeting_room_outlined,
-                color: Color(0xFF00D4AA),
-              ),
+              const Icon(Icons.meeting_room_outlined, color: Color(0xFF00D4AA)),
               const SizedBox(width: 10),
               Text(
                 'Odalar',
