@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 import models
 import schemas
@@ -29,7 +30,7 @@ def _b64url_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(padded.encode("utf-8"))
 
 
-def get_current_user_id(authorization: Optional[str] = Header(default=None)) -> UUID:
+def _get_auth_payload(authorization: Optional[str]) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Oturum gerekli")
 
@@ -47,8 +48,24 @@ def get_current_user_id(authorization: Optional[str] = Header(default=None)) -> 
             raise HTTPException(status_code=401, detail="Token dogrulanamadi")
 
     try:
-        payload = json.loads(_b64url_decode(parts[1]))
+        return json.loads(_b64url_decode(parts[1]))
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Token kullanici bilgisi okunamadi") from exc
+
+
+def get_current_user_id(authorization: Optional[str] = Header(default=None)) -> UUID:
+    payload = _get_auth_payload(authorization)
+    try:
         return UUID(payload["sub"])
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Token kullanici bilgisi okunamadi") from exc
+
+
+def get_current_user_claims(authorization: Optional[str] = Header(default=None)) -> dict:
+    payload = _get_auth_payload(authorization)
+    try:
+        payload["user_id"] = UUID(payload["sub"])
+        return payload
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Token kullanici bilgisi okunamadi") from exc
 
@@ -79,6 +96,9 @@ def _weather_condition(code: Optional[int]) -> str:
 async def lifespan(app: FastAPI):
     try:
         models.Base.metadata.create_all(bind=engine)
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)"))
     except SQLAlchemyError as exc:
         logging.warning("Veritabani semasi kontrol edilemedi: %s", exc)
 
@@ -286,16 +306,60 @@ def send_control_command(
     return {"status": "ok", "action": cmd.action}
 
 
-def _get_or_create_user(db: Session, user_id: UUID) -> models.User:
+def _get_profile_username(db: Session, user_id: UUID) -> Optional[str]:
+    try:
+        row = db.execute(
+            text("SELECT username FROM profiles WHERE id = :user_id"),
+            {"user_id": str(user_id)},
+        ).mappings().first()
+        if row:
+            return row.get("username")
+    except Exception as exc:
+        logging.debug("Profil kullanici adi okunamadi: %s", exc)
+    return None
+
+
+def _get_or_create_user(
+    db: Session,
+    user_id: UUID,
+    email: Optional[str] = None,
+) -> models.User:
+    admin_ids = {
+        item.strip()
+        for item in os.getenv("ADMIN_USER_IDS", "").split(",")
+        if item.strip()
+    }
+    is_env_admin = str(user_id) in admin_ids
+    username = _get_profile_username(db, user_id)
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        # First user becomes admin
-        user_count = db.query(models.User).count()
-        is_first_user = user_count == 0
-        user = models.User(id=user_id, is_admin=is_first_user)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+    if user:
+        changed = False
+        if is_env_admin and not user.is_admin:
+            user.is_admin = True
+            changed = True
+        if email and user.email != email:
+            user.email = email
+            changed = True
+        if username and user.username != username:
+            user.username = username
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+        return user
+
+    # First local user becomes admin unless explicit ADMIN_USER_IDS is used.
+    user_count = db.query(models.User).count()
+    is_first_user = user_count == 0 and not admin_ids
+    user = models.User(
+        id=user_id,
+        email=email,
+        username=username,
+        is_admin=is_env_admin or is_first_user,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 
@@ -304,13 +368,204 @@ def _is_user_admin(db: Session, user_id: UUID) -> bool:
     return bool(user and user.is_admin)
 
 
+def _require_admin(db: Session, user_id: UUID) -> None:
+    _get_or_create_user(db, user_id)
+    if not _is_user_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Admin yetkisi gerekli")
+
+
+def _get_target_user(db: Session, target_user_id: UUID) -> models.User:
+    user = db.query(models.User).filter(models.User.id == target_user_id).first()
+    if user:
+        return user
+    user = models.User(id=target_user_id, is_admin=False)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _validate_room_for_user(
+    db: Session,
+    room_id: Optional[int],
+    target_user_id: UUID,
+) -> None:
+    if room_id is None:
+        return
+    room = (
+        db.query(models.Room)
+        .filter(models.Room.id == room_id, models.Room.user_id == target_user_id)
+        .first()
+    )
+    if not room:
+        raise HTTPException(status_code=404, detail="Oda bu kullaniciya ait degil")
+
+
 @app.get("/me", response_model=schemas.UserOut)
 def get_me(
+    claims: dict = Depends(get_current_user_claims),
+    db: Session = Depends(get_db),
+):
+    user = _get_or_create_user(
+        db,
+        claims["user_id"],
+        email=claims.get("email"),
+    )
+    return user
+
+
+@app.get("/admin/users", response_model=List[schemas.UserOut])
+def list_users(
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    user = _get_or_create_user(db, user_id)
-    return user
+    _require_admin(db, user_id)
+    admin_ids = {
+        item.strip()
+        for item in os.getenv("ADMIN_USER_IDS", "").split(",")
+        if item.strip()
+    }
+    users = (
+        db.query(models.User)
+        .filter(models.User.is_admin.is_(False))
+        .filter(models.User.id != user_id)
+        .order_by(models.User.created_at.desc())
+        .all()
+    )
+    users = [user for user in users if str(user.id) not in admin_ids]
+    changed = False
+    for user in users:
+        username = _get_profile_username(db, user.id)
+        if username and user.username != username:
+            user.username = username
+            changed = True
+    if changed:
+        db.commit()
+    return users
+
+
+@app.delete("/admin/users/{target_user_id}")
+def delete_user(
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    if target_user_id == user_id:
+        raise HTTPException(status_code=400, detail="Admin kendi hesabini silemez")
+
+    user = db.query(models.User).filter(models.User.id == target_user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanici bulunamadi")
+
+    db.query(models.DeviceControl).filter(
+        models.DeviceControl.user_id == target_user_id
+    ).delete(synchronize_session=False)
+    db.query(models.Device).filter(
+        models.Device.user_id == target_user_id
+    ).delete(synchronize_session=False)
+    db.query(models.Sensor).filter(
+        models.Sensor.user_id == target_user_id
+    ).delete(synchronize_session=False)
+    db.query(models.Room).filter(
+        models.Room.user_id == target_user_id
+    ).delete(synchronize_session=False)
+    db.delete(user)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@app.get("/admin/users/{target_user_id}/rooms", response_model=List[schemas.RoomOut])
+def list_user_rooms(
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    _get_target_user(db, target_user_id)
+    return (
+        db.query(models.Room)
+        .filter(models.Room.user_id == target_user_id)
+        .order_by(models.Room.name)
+        .all()
+    )
+
+
+@app.get("/admin/users/{target_user_id}/devices", response_model=List[schemas.DeviceOut])
+def list_user_devices(
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    _get_target_user(db, target_user_id)
+    return (
+        db.query(models.Device)
+        .filter(models.Device.user_id == target_user_id)
+        .order_by(models.Device.device_name)
+        .all()
+    )
+
+
+@app.get("/admin/users/{target_user_id}/sensors", response_model=List[schemas.SensorOut])
+def list_user_sensors(
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    _get_target_user(db, target_user_id)
+    return (
+        db.query(models.Sensor)
+        .filter(models.Sensor.user_id == target_user_id)
+        .order_by(models.Sensor.sensor_name)
+        .all()
+    )
+
+
+@app.post("/admin/rooms", response_model=schemas.RoomOut)
+def create_room(
+    payload: schemas.RoomCreate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    _get_target_user(db, payload.target_user_id)
+
+    room = models.Room(user_id=payload.target_user_id, name=payload.name)
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+    return room
+
+
+@app.delete("/admin/rooms/{room_id}")
+def delete_room(
+    room_id: int,
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    room = (
+        db.query(models.Room)
+        .filter(models.Room.id == room_id, models.Room.user_id == target_user_id)
+        .first()
+    )
+    if not room:
+        raise HTTPException(status_code=404, detail="Oda bulunamadi")
+
+    db.query(models.Device).filter(
+        models.Device.room_id == room_id,
+        models.Device.user_id == target_user_id,
+    ).delete(synchronize_session=False)
+    db.query(models.Sensor).filter(
+        models.Sensor.room_id == room_id,
+        models.Sensor.user_id == target_user_id,
+    ).delete(synchronize_session=False)
+    db.delete(room)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.post("/admin/sensors", response_model=schemas.SensorOut)
@@ -319,11 +574,12 @@ def create_sensor(
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    if not _is_user_admin(db, user_id):
-        raise HTTPException(status_code=403, detail="Admin yetkisi gerekli")
+    _require_admin(db, user_id)
+    _get_target_user(db, payload.target_user_id)
+    _validate_room_for_user(db, payload.room_id, payload.target_user_id)
 
     sensor = models.Sensor(
-        user_id=user_id,
+        user_id=payload.target_user_id,
         sensor_name=payload.sensor_name,
         sensor_type=payload.sensor_type,
         room_id=payload.room_id,
@@ -335,17 +591,38 @@ def create_sensor(
     return sensor
 
 
+@app.delete("/admin/sensors/{sensor_id}")
+def delete_sensor(
+    sensor_id: int,
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    sensor = (
+        db.query(models.Sensor)
+        .filter(models.Sensor.id == sensor_id, models.Sensor.user_id == target_user_id)
+        .first()
+    )
+    if not sensor:
+        raise HTTPException(status_code=404, detail="Sensor bulunamadi")
+    db.delete(sensor)
+    db.commit()
+    return {"status": "deleted"}
+
+
 @app.post("/admin/devices", response_model=schemas.DeviceOut)
 def create_device(
     payload: schemas.DeviceCreate,
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    if not _is_user_admin(db, user_id):
-        raise HTTPException(status_code=403, detail="Admin yetkisi gerekli")
+    _require_admin(db, user_id)
+    _get_target_user(db, payload.target_user_id)
+    _validate_room_for_user(db, payload.room_id, payload.target_user_id)
 
     device = models.Device(
-        user_id=user_id,
+        user_id=payload.target_user_id,
         device_name=payload.device_name,
         device_type=payload.device_type,
         room_id=payload.room_id,
@@ -354,6 +631,26 @@ def create_device(
     db.commit()
     db.refresh(device)
     return device
+
+
+@app.delete("/admin/devices/{device_id}")
+def delete_device(
+    device_id: int,
+    target_user_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _require_admin(db, user_id)
+    device = (
+        db.query(models.Device)
+        .filter(models.Device.id == device_id, models.Device.user_id == target_user_id)
+        .first()
+    )
+    if not device:
+        raise HTTPException(status_code=404, detail="Cihaz bulunamadi")
+    db.delete(device)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.post("/fcm-token", response_model=schemas.FCMTokenOut)

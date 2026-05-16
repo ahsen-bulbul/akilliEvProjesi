@@ -44,10 +44,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final me = await ApiService.getMe();
       if (mounted) {
         setState(() {
-          _isAdmin = me['is_admin'] == true;
+          _isAdmin = me.isAdmin;
         });
         if (!_isAdmin) {
-          debugPrint('Current user is NOT admin. Admin status: ${me['is_admin']}');
+          debugPrint('Current user is NOT admin. Admin status: ${me.isAdmin}');
         }
       }
     } catch (e) {

@@ -7,8 +7,10 @@ import 'data/repositories/firebase_auth_repository.dart';
 import 'data/repositories/firebase_event_repository_impl.dart';
 import 'data/repositories/control_repository_impl.dart';
 import 'data/repositories/offline_first_sensor_repository.dart';
+import 'data/datasources/api_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/firebase_service.dart';
+import 'presentation/screens/admin_screen.dart';
 import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/camera_screen.dart';
 import 'presentation/screens/home_screen.dart';
@@ -17,6 +19,7 @@ import 'presentation/screens/control_screen.dart';
 import 'presentation/screens/stats_screen.dart';
 import 'presentation/widgets/offline_banner.dart';
 import 'presentation/viewmodels/auth_view_model.dart';
+import 'presentation/viewmodels/admin_view_model.dart';
 import 'presentation/viewmodels/control_view_model.dart';
 import 'presentation/viewmodels/firebase_alarm_log_view_model.dart';
 import 'presentation/viewmodels/sensor_view_model.dart';
@@ -82,6 +85,7 @@ class _AppProviders extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => FirebaseAlarmLogViewModel(firebaseEventRepository),
         ),
+        ChangeNotifierProvider(create: (_) => AdminViewModel()),
         ChangeNotifierProvider(
           create: (_) => SensorViewModel(
             OfflineFirstSensorRepository(),
@@ -110,7 +114,80 @@ class AuthGate extends StatelessWidget {
         if (session == null) {
           return const LoginScreen();
         }
-        return const MainScreen();
+        return FutureBuilder<AppUser>(
+          future: ApiService.getMe(),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState != ConnectionState.done) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            if (userSnapshot.hasError) {
+              return Scaffold(
+                backgroundColor: const Color(0xFF0D1117),
+                body: SafeArea(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.cloud_off_outlined,
+                            color: Color(0xFFFFB4B4),
+                            size: 44,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Backend baglantisi kurulamadı',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'FastAPI sunucusunun ${ApiService.baseUrl} adresinde calistigindan emin olun.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.dmSans(
+                              color: const Color(0xFF8B949E),
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            userSnapshot.error.toString(),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.dmSans(
+                              color: const Color(0xFFFFB4B4),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                Supabase.instance.client.auth.signOut(),
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Cikis yap'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            final user = userSnapshot.data;
+            if (user?.isAdmin == true) {
+              return const AdminScreen();
+            }
+            return const MainScreen();
+          },
+        );
       },
     );
   }

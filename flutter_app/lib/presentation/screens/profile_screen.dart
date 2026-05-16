@@ -61,7 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final me = await ApiService.getMe();
       setState(() {
-        _isAdmin = me['is_admin'] == true;
+        _isAdmin = me.isAdmin;
         _loading = false;
       });
     } catch (e) {

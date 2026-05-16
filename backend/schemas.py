@@ -89,6 +89,7 @@ class WeatherOut(BaseModel):
 
 
 class SensorCreate(BaseModel):
+    target_user_id: UUID
     sensor_name: str
     sensor_type: str
     room_id: Optional[int] = None
@@ -96,13 +97,21 @@ class SensorCreate(BaseModel):
 
 
 class DeviceCreate(BaseModel):
+    target_user_id: UUID
     device_name: str
     device_type: str
     room_id: Optional[int] = None
 
 
+class RoomCreate(BaseModel):
+    target_user_id: UUID
+    name: str
+
+
 class UserOut(BaseModel):
     id: UUID
+    email: Optional[str] = None
+    username: Optional[str] = None
     is_admin: bool
 
     class Config:

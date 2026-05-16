@@ -3,10 +3,78 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/api_config.dart';
 import '../../domain/entities/control_device.dart';
 import '../../domain/entities/control_room.dart';
 import '../../domain/entities/sensor_data.dart';
 import '../models/sensor_data_model.dart';
+
+class AppUser {
+  final String id;
+  final String? email;
+  final String? username;
+  final bool isAdmin;
+
+  const AppUser({
+    required this.id,
+    this.email,
+    this.username,
+    required this.isAdmin,
+  });
+
+  String get shortId => id.length <= 8 ? id : id.substring(0, 8);
+  String get displayName {
+    final cleanUsername = username?.trim();
+    if (cleanUsername != null && cleanUsername.isNotEmpty) {
+      return cleanUsername;
+    }
+
+    final cleanEmail = email?.trim();
+    if (cleanEmail != null && cleanEmail.isNotEmpty) {
+      return cleanEmail;
+    }
+
+    return shortId;
+  }
+
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    return AppUser(
+      id: json['id'] as String,
+      email: json['email'] as String?,
+      username: json['username'] as String?,
+      isAdmin: json['is_admin'] == true,
+    );
+  }
+}
+
+class SensorDefinition {
+  final int id;
+  final String userId;
+  final int? roomId;
+  final String name;
+  final String type;
+  final bool active;
+
+  const SensorDefinition({
+    required this.id,
+    required this.userId,
+    required this.roomId,
+    required this.name,
+    required this.type,
+    required this.active,
+  });
+
+  factory SensorDefinition.fromJson(Map<String, dynamic> json) {
+    return SensorDefinition(
+      id: json['id'] as int,
+      userId: json['user_id'] as String,
+      roomId: json['room_id'] as int?,
+      name: json['sensor_name'] as String,
+      type: json['sensor_type'] as String,
+      active: json['active'] == true,
+    );
+  }
+}
 
 class WeatherData {
   final String location;
@@ -52,7 +120,7 @@ class WeatherData {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl = ApiConfig.baseUrl;
 
   static Map<String, String> get _headers {
     final token = Supabase.instance.client.auth.currentSession?.accessToken;
@@ -75,6 +143,17 @@ class ApiService {
       return SensorDataModel.fromJson(jsonDecode(response.body));
     }
     throw Exception(_errorMessage('Veri alinamadi', response));
+  }
+
+  static Future<AppUser> getMe() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/me'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      return AppUser.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Kullanici bilgisi alinamadi', response));
   }
 
   static Future<List<SensorData>> getSensorHistory({int limit = 20}) async {
@@ -101,39 +180,62 @@ class ApiService {
     throw Exception(_errorMessage('Cihazlar alinamadi', response));
   }
 
-  static Future<Map<String, dynamic>> getMe() async {
+  static Future<List<AppUser>> getAdminUsers() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/me'),
+      Uri.parse('$baseUrl/admin/users'),
       headers: _headers,
     );
     if (response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => AppUser.fromJson(e)).toList();
     }
-    throw Exception(_errorMessage('Kullanici bilgisi alinamadi', response));
+    throw Exception(_errorMessage('Kullanicilar alinamadi', response));
   }
 
-  static Future<Map<String, dynamic>> createSensor(Map<String, dynamic> payload) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/admin/sensors'),
+  static Future<void> deleteAdminUser(String userId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/admin/users/$userId'),
       headers: _headers,
-      body: jsonEncode(payload),
     );
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(_errorMessage('Kullanici silinemedi', response));
     }
-    throw Exception(_errorMessage('Sensor olusturulamadi', response));
   }
 
-  static Future<Map<String, dynamic>> createDevice(Map<String, dynamic> payload) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/admin/devices'),
+  static Future<List<ControlRoom>> getAdminRooms(String userId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/admin/users/$userId/rooms'),
       headers: _headers,
-      body: jsonEncode(payload),
     );
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => _roomFromJson(e)).toList();
     }
-    throw Exception(_errorMessage('Cihaz olusturulamadi', response));
+    throw Exception(_errorMessage('Admin odalari alinamadi', response));
+  }
+
+  static Future<List<ControlDevice>> getAdminDevices(String userId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/admin/users/$userId/devices'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => _deviceFromJson(e)).toList();
+    }
+    throw Exception(_errorMessage('Admin cihazlari alinamadi', response));
+  }
+
+  static Future<List<SensorDefinition>> getAdminSensors(String userId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/admin/users/$userId/sensors'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => SensorDefinition.fromJson(e)).toList();
+    }
+    throw Exception(_errorMessage('Admin sensorleri alinamadi', response));
   }
 
   static Future<List<ControlRoom>> getRooms() async {
@@ -146,6 +248,105 @@ class ApiService {
       return data.map((e) => _roomFromJson(e)).toList();
     }
     throw Exception(_errorMessage('Odalar alinamadi', response));
+  }
+
+  static Future<ControlRoom> createAdminRoom({
+    required String targetUserId,
+    required String name,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/rooms'),
+      headers: _headers,
+      body: jsonEncode({'target_user_id': targetUserId, 'name': name}),
+    );
+    if (response.statusCode == 200) {
+      return _roomFromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Oda olusturulamadi', response));
+  }
+
+  static Future<ControlDevice> createAdminDevice({
+    required String targetUserId,
+    required String name,
+    required String type,
+    int? roomId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/devices'),
+      headers: _headers,
+      body: jsonEncode({
+        'target_user_id': targetUserId,
+        'device_name': name,
+        'device_type': type,
+        'room_id': roomId,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return _deviceFromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Cihaz olusturulamadi', response));
+  }
+
+  static Future<SensorDefinition> createAdminSensor({
+    required String targetUserId,
+    required String name,
+    required String type,
+    int? roomId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/sensors'),
+      headers: _headers,
+      body: jsonEncode({
+        'target_user_id': targetUserId,
+        'sensor_name': name,
+        'sensor_type': type,
+        'room_id': roomId,
+        'active': true,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return SensorDefinition.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Sensor olusturulamadi', response));
+  }
+
+  static Future<void> deleteAdminRoom({
+    required String targetUserId,
+    required int roomId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/admin/rooms/$roomId?target_user_id=$targetUserId'),
+      headers: _headers,
+    );
+    if (response.statusCode >= 400) {
+      throw Exception(_errorMessage('Oda silinemedi', response));
+    }
+  }
+
+  static Future<void> deleteAdminDevice({
+    required String targetUserId,
+    required int deviceId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/admin/devices/$deviceId?target_user_id=$targetUserId'),
+      headers: _headers,
+    );
+    if (response.statusCode >= 400) {
+      throw Exception(_errorMessage('Cihaz silinemedi', response));
+    }
+  }
+
+  static Future<void> deleteAdminSensor({
+    required String targetUserId,
+    required int sensorId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/admin/sensors/$sensorId?target_user_id=$targetUserId'),
+      headers: _headers,
+    );
+    if (response.statusCode >= 400) {
+      throw Exception(_errorMessage('Sensor silinemedi', response));
+    }
   }
 
   static Future<WeatherData> getCurrentWeather() async {
