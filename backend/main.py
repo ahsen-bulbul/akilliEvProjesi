@@ -286,6 +286,76 @@ def send_control_command(
     return {"status": "ok", "action": cmd.action}
 
 
+def _get_or_create_user(db: Session, user_id: UUID) -> models.User:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        # First user becomes admin
+        user_count = db.query(models.User).count()
+        is_first_user = user_count == 0
+        user = models.User(id=user_id, is_admin=is_first_user)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+def _is_user_admin(db: Session, user_id: UUID) -> bool:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    return bool(user and user.is_admin)
+
+
+@app.get("/me", response_model=schemas.UserOut)
+def get_me(
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    user = _get_or_create_user(db, user_id)
+    return user
+
+
+@app.post("/admin/sensors", response_model=schemas.SensorOut)
+def create_sensor(
+    payload: schemas.SensorCreate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    if not _is_user_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Admin yetkisi gerekli")
+
+    sensor = models.Sensor(
+        user_id=user_id,
+        sensor_name=payload.sensor_name,
+        sensor_type=payload.sensor_type,
+        room_id=payload.room_id,
+        active=payload.active,
+    )
+    db.add(sensor)
+    db.commit()
+    db.refresh(sensor)
+    return sensor
+
+
+@app.post("/admin/devices", response_model=schemas.DeviceOut)
+def create_device(
+    payload: schemas.DeviceCreate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    if not _is_user_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Admin yetkisi gerekli")
+
+    device = models.Device(
+        user_id=user_id,
+        device_name=payload.device_name,
+        device_type=payload.device_type,
+        room_id=payload.room_id,
+    )
+    db.add(device)
+    db.commit()
+    db.refresh(device)
+    return device
+
+
 @app.post("/fcm-token", response_model=schemas.FCMTokenOut)
 def register_fcm_token(
     token_data: schemas.FCMTokenIn,

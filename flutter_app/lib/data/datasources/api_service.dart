@@ -101,6 +101,41 @@ class ApiService {
     throw Exception(_errorMessage('Cihazlar alinamadi', response));
   }
 
+  static Future<Map<String, dynamic>> getMe() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/me'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_errorMessage('Kullanici bilgisi alinamadi', response));
+  }
+
+  static Future<Map<String, dynamic>> createSensor(Map<String, dynamic> payload) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/sensors'),
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_errorMessage('Sensor olusturulamadi', response));
+  }
+
+  static Future<Map<String, dynamic>> createDevice(Map<String, dynamic> payload) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/devices'),
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_errorMessage('Cihaz olusturulamadi', response));
+  }
+
   static Future<List<ControlRoom>> getRooms() async {
     final response = await http.get(
       Uri.parse('$baseUrl/rooms'),

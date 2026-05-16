@@ -68,6 +68,14 @@ class SensorReading(Base):
         return self.data.get("distance_cm") if self.data else None
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class DeviceControl(Base):
     __tablename__ = "device_controls"
 

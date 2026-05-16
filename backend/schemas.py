@@ -86,3 +86,24 @@ class WeatherOut(BaseModel):
     weather_code: Optional[int] = None
     is_day: Optional[bool] = None
     observed_at: Optional[str] = None
+
+
+class SensorCreate(BaseModel):
+    sensor_name: str
+    sensor_type: str
+    room_id: Optional[int] = None
+    active: Optional[bool] = True
+
+
+class DeviceCreate(BaseModel):
+    device_name: str
+    device_type: str
+    room_id: Optional[int] = None
+
+
+class UserOut(BaseModel):
+    id: UUID
+    is_admin: bool
+
+    class Config:
+        from_attributes = True

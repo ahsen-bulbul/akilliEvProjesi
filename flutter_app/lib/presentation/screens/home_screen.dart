@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/datasources/api_service.dart';
+import 'profile_screen.dart';
+import 'admin_panel_screen.dart';
 import '../viewmodels/sensor_view_model.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -21,11 +23,13 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _weatherError;
   Timer? _weatherTimer;
   Timer? _statusTimer;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _loadWeather();
+    _loadAdminStatus();
     _weatherTimer = Timer.periodic(
       const Duration(minutes: 10),
       (_) => _loadWeather(),
@@ -33,6 +37,27 @@ class _HomeScreenState extends State<HomeScreen> {
     _statusTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _loadAdminStatus() async {
+    try {
+      final me = await ApiService.getMe();
+      if (mounted) {
+        setState(() {
+          _isAdmin = me['is_admin'] == true;
+        });
+        if (!_isAdmin) {
+          debugPrint('Current user is NOT admin. Admin status: ${me['is_admin']}');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading admin status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Admin status error: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -145,31 +170,84 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  Stack(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF161B22),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF30363D)),
+                      if (_isAdmin)
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+                            );
+                          },
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF161B22),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF30363D)),
+                            ),
+                            child: const Icon(
+                              Icons.admin_panel_settings,
+                              color: Color(0xFF00D4AA),
+                              size: 22,
+                            ),
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                          size: 22,
+                      if (_isAdmin) const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                          );
+                        },
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF161B22),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFF30363D)),
+                              ),
+                              child: const Icon(
+                                Icons.person_outline,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF00D4AA),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Positioned(
-                        right: 8,
-                        top: 8,
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _loadAdminStatus,
                         child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF00D4AA),
-                            shape: BoxShape.circle,
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF161B22),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF30363D)),
+                          ),
+                          child: const Icon(
+                            Icons.refresh,
+                            color: Color(0xFF8B949E),
+                            size: 22,
                           ),
                         ),
                       ),
@@ -178,6 +256,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
 
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161B22),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFF30363D)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Profil',
+                            style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Hesabini ve admin durumunu görüntüle.',
+                            style: GoogleFonts.dmSans(
+                              color: const Color(0xFF8B949E),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.arrow_forward_ios, color: Color(0xFF8B949E), size: 18),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
 
               // --- Hava durumu kartı ---
