@@ -53,9 +53,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       debugPrint('Error loading admin status: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Admin status error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Admin status error: $e')));
       }
     }
   }
@@ -177,7 +177,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         GestureDetector(
                           onTap: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const AdminPanelScreen(),
+                              ),
                             );
                           },
                           child: Container(
@@ -186,7 +188,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF161B22),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFF30363D)),
+                              border: Border.all(
+                                color: const Color(0xFF30363D),
+                              ),
                             ),
                             child: const Icon(
                               Icons.admin_panel_settings,
@@ -199,7 +203,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       GestureDetector(
                         onTap: () {
                           Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const ProfileScreen(),
+                            ),
                           );
                         },
                         child: Stack(
@@ -210,7 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFF161B22),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF30363D)),
+                                border: Border.all(
+                                  color: const Color(0xFF30363D),
+                                ),
                               ),
                               child: const Icon(
                                 Icons.person_outline,
@@ -265,7 +273,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF161B22),
                     borderRadius: BorderRadius.circular(18),
@@ -295,7 +306,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-                      const Icon(Icons.arrow_forward_ios, color: Color(0xFF8B949E), size: 18),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Color(0xFF8B949E),
+                        size: 18,
+                      ),
                     ],
                   ),
                 ),

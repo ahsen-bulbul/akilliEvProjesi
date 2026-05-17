@@ -74,6 +74,10 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     email = Column(String(255), nullable=True)
     username = Column(String(100), nullable=True)
+    home_city = Column(String(100), nullable=True)
+    home_latitude = Column(String(50), nullable=True)
+    home_longitude = Column(String(50), nullable=True)
+    setup_package = Column(String(50), nullable=True)
     is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../domain/entities/control_device.dart';
+import '../../domain/entities/control_room.dart';
+import 'room_detail_screen.dart';
 import '../viewmodels/control_view_model.dart';
 
 class ControlScreen extends StatelessWidget {
@@ -68,6 +70,7 @@ class ControlScreen extends StatelessWidget {
               else ...[
                 for (final room in roomsWithDevices) ...[
                   _RoomPanel(
+                    room: room,
                     title: room.name,
                     devices: devicesByRoom[room.id]!,
                     busyDeviceIds: viewModel.busyDeviceIds,
@@ -77,6 +80,7 @@ class ControlScreen extends StatelessWidget {
                 ],
                 if (unassignedDevices.isNotEmpty) ...[
                   _RoomPanel(
+                    room: null,
                     title: 'Odasiz Cihazlar',
                     devices: unassignedDevices,
                     busyDeviceIds: viewModel.busyDeviceIds,
@@ -94,12 +98,14 @@ class ControlScreen extends StatelessWidget {
 }
 
 class _RoomPanel extends StatelessWidget {
+  final ControlRoom? room;
   final String title;
   final List<ControlDevice> devices;
   final Set<int> busyDeviceIds;
   final Future<void> Function(ControlDevice device, bool enabled) onSetStatus;
 
   const _RoomPanel({
+    required this.room,
     required this.title,
     required this.devices,
     required this.busyDeviceIds,
@@ -145,6 +151,27 @@ class _RoomPanel extends StatelessWidget {
                     fontSize: 11,
                   ),
                 ),
+                if (room != null) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: 'Oda detayi',
+                    visualDensity: VisualDensity.compact,
+                    color: const Color(0xFF00D4AA),
+                    onPressed: () {
+                      final controlViewModel = context
+                          .read<ControlViewModel>();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ChangeNotifierProvider.value(
+                            value: controlViewModel,
+                            child: RoomDetailScreen(room: room!),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
               ],
             ),
           ),

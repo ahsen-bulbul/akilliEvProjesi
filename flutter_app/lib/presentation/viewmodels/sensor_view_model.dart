@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/services/notification_settings_service.dart';
 import '../../data/services/notification_service.dart';
 import '../../domain/entities/sensor_data.dart';
 import '../../domain/entities/sensor_threshold.dart';
@@ -44,6 +45,7 @@ class SensorViewModel extends ChangeNotifier {
   DateTime? _lastSystemNotificationAt;
   int _alertVersion = 0;
   List<String> _lastAlertLabels = const [];
+  final List<SensorData> _recentReadings = [];
 
   SensorData? get latest => _latest;
   bool get loading => _loading;
@@ -51,6 +53,7 @@ class SensorViewModel extends ChangeNotifier {
   String? get error => _error;
   int get alertVersion => _alertVersion;
   List<String> get lastAlertLabels => _lastAlertLabels;
+  List<SensorData> get recentReadings => List.unmodifiable(_recentReadings);
 
   bool get hasAlert => _latest != null && alertLabels(_latest!).isNotEmpty;
 
@@ -86,6 +89,10 @@ class SensorViewModel extends ChangeNotifier {
   void _handleReading(SensorData reading) {
     _cacheFallbackTimer?.cancel();
     _latest = reading;
+    _recentReadings.add(reading);
+    if (_recentReadings.length > 40) {
+      _recentReadings.removeAt(0);
+    }
     _loading = false;
     _error = null;
     _showingCachedData = false;
@@ -124,8 +131,17 @@ class SensorViewModel extends ChangeNotifier {
     _alertVersion++;
     notifyListeners();
     unawaited(_eventRepository?.addAlarmLog(reading: reading, labels: alerts));
+    unawaited(_showSystemNotificationIfNeeded(alerts));
+  }
 
-    final key = alerts.join('|');
+  Future<void> _showSystemNotificationIfNeeded(List<String> alerts) async {
+    final enabledAlerts =
+        await NotificationSettingsService.filterEnabledAlerts(alerts);
+    if (enabledAlerts.isEmpty) {
+      return;
+    }
+
+    final key = enabledAlerts.join('|');
     final now = DateTime.now();
     final lastAt = _lastSystemNotificationAt;
     if (_lastSystemNotificationKey == key &&
@@ -136,17 +152,24 @@ class SensorViewModel extends ChangeNotifier {
 
     _lastSystemNotificationKey = key;
     _lastSystemNotificationAt = now;
-    NotificationService.showSensorAlert(alerts);
+    await NotificationService.showSensorAlert(enabledAlerts);
   }
 
   List<String> alertLabels(SensorData reading) {
-    return thresholds
+    final labels = thresholds
         .where(
           (threshold) =>
               threshold.isExceeded(_valueFor(reading, threshold.key)),
         )
         .map((threshold) => threshold.label)
         .toList();
+    if (reading.motionDetected == true) {
+      labels.add('Motion');
+    }
+    if (reading.buzzer == true) {
+      labels.add('Buzzer');
+    }
+    return labels;
   }
 
   double? _valueFor(SensorData reading, String key) {

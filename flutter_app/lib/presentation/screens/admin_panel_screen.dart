@@ -93,14 +93,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       await _loadDevices();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Device başarıyla eklendi')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Device başarıyla eklendi')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _addingDevice = false);
     }
@@ -132,14 +132,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       await _loadSensors();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sensor başarıyla eklendi')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sensor başarıyla eklendi')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _addingSensor = false);
     }
@@ -147,33 +147,39 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Future<void> _deleteDevice(String deviceId) async {
     try {
-      await Supabase.instance.client.from('devices').delete().eq('id', deviceId);
+      await Supabase.instance.client
+          .from('devices')
+          .delete()
+          .eq('id', deviceId);
       await _loadDevices();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Device silindi')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Device silindi')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: ${e.toString()}')));
     }
   }
 
   Future<void> _deleteSensor(String sensorId) async {
     try {
-      await Supabase.instance.client.from('sensors').delete().eq('id', sensorId);
+      await Supabase.instance.client
+          .from('sensors')
+          .delete()
+          .eq('id', sensorId);
       await _loadSensors();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sensor silindi')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sensor silindi')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: ${e.toString()}')));
     }
   }
 
@@ -193,12 +199,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildDeviceTab(),
-            _buildSensorTab(),
-          ],
-        ),
+        body: TabBarView(children: [_buildDeviceTab(), _buildSensorTab()]),
       ),
     );
   }
@@ -281,37 +282,35 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             _loadingDevices
                 ? const Center(child: CircularProgressIndicator())
                 : _devices.isEmpty
-                    ? Text(
-                        'Henüz device eklenmedi',
-                        style: GoogleFonts.dmSans(color: const Color(0xFF8B949E)),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _devices.length,
-                        itemBuilder: (context, index) {
-                          final device = _devices[index];
-                          return Card(
-                            color: const Color(0xFF161B22),
-                            child: ListTile(
-                              title: Text(
-                                device['name'] ?? 'Unknown',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              subtitle: Text(
-                                device['device_type'] ?? 'Unknown Type',
-                                style: const TextStyle(
-                                  color: Color(0xFF8B949E),
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteDevice(device['id']),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                ? Text(
+                    'Henüz device eklenmedi',
+                    style: GoogleFonts.dmSans(color: const Color(0xFF8B949E)),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _devices.length,
+                    itemBuilder: (context, index) {
+                      final device = _devices[index];
+                      return Card(
+                        color: const Color(0xFF161B22),
+                        child: ListTile(
+                          title: Text(
+                            device['name'] ?? 'Unknown',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          subtitle: Text(
+                            device['device_type'] ?? 'Unknown Type',
+                            style: const TextStyle(color: Color(0xFF8B949E)),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteDevice(device['id']),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ],
         ),
       ),
@@ -413,37 +412,35 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             _loadingSensors
                 ? const Center(child: CircularProgressIndicator())
                 : _sensors.isEmpty
-                    ? Text(
-                        'Henüz sensor eklenmedi',
-                        style: GoogleFonts.dmSans(color: const Color(0xFF8B949E)),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _sensors.length,
-                        itemBuilder: (context, index) {
-                          final sensor = _sensors[index];
-                          return Card(
-                            color: const Color(0xFF161B22),
-                            child: ListTile(
-                              title: Text(
-                                sensor['name'] ?? 'Unknown',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              subtitle: Text(
-                                '${sensor['sensor_type'] ?? 'Unknown'} (${sensor['unit'] ?? '?'})',
-                                style: const TextStyle(
-                                  color: Color(0xFF8B949E),
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteSensor(sensor['id']),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                ? Text(
+                    'Henüz sensor eklenmedi',
+                    style: GoogleFonts.dmSans(color: const Color(0xFF8B949E)),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _sensors.length,
+                    itemBuilder: (context, index) {
+                      final sensor = _sensors[index];
+                      return Card(
+                        color: const Color(0xFF161B22),
+                        child: ListTile(
+                          title: Text(
+                            sensor['name'] ?? 'Unknown',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          subtitle: Text(
+                            '${sensor['sensor_type'] ?? 'Unknown'} (${sensor['unit'] ?? '?'})',
+                            style: const TextStyle(color: Color(0xFF8B949E)),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteSensor(sensor['id']),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ],
         ),
       ),

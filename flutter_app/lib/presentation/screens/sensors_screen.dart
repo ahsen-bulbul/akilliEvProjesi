@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,8 @@ import 'package:provider/provider.dart';
 
 import '../../domain/entities/sensor_data.dart';
 import '../../domain/entities/sensor_alarm_log.dart';
+import 'alarm_history_screen.dart';
+import 'notification_settings_screen.dart';
 import '../viewmodels/firebase_alarm_log_view_model.dart';
 import '../viewmodels/sensor_view_model.dart';
 import '../widgets/sensor_card.dart';
@@ -65,6 +68,21 @@ class _SensorsScreenState extends State<SensorsScreen> {
                 hasAlert: viewModel.hasAlert,
                 isCached: viewModel.showingCachedData,
               ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Bildirim Ayarlari'),
+                ),
+              ),
               const SizedBox(height: 18),
               if (viewModel.loading)
                 const _StatusPanel(text: 'Loading live sensor data...')
@@ -87,7 +105,10 @@ class _SensorsScreenState extends State<SensorsScreen> {
                   isCached: viewModel.showingCachedData,
                 ),
                 const SizedBox(height: 16),
-                _SensorGrid(reading: reading),
+                _SensorGrid(
+                  reading: reading,
+                  history: viewModel.recentReadings,
+                ),
                 const SizedBox(height: 16),
                 const _FirestoreAlarmLogPanel(),
               ],
@@ -118,11 +139,7 @@ class _FirestoreAlarmLogPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.cloud_queue,
-                color: Color(0xFFFFD166),
-                size: 22,
-              ),
+              const Icon(Icons.cloud_queue, color: Color(0xFFFFD166), size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -133,6 +150,21 @@ class _FirestoreAlarmLogPanel extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
+              TextButton(
+                onPressed: () {
+                  final alarmLogViewModel = context
+                      .read<FirebaseAlarmLogViewModel>();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: alarmLogViewModel,
+                        child: const AlarmHistoryScreen(),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Tumunu gor'),
               ),
             ],
           ),
@@ -181,10 +213,7 @@ class _FirestoreStatusText extends StatelessWidget {
   final String text;
   final Color color;
 
-  const _FirestoreStatusText(
-    this.text, {
-    this.color = const Color(0xFF8B949E),
-  });
+  const _FirestoreStatusText(this.text, {this.color = const Color(0xFF8B949E)});
 
   @override
   Widget build(BuildContext context) {
@@ -372,14 +401,17 @@ class _DevicePanel extends StatelessWidget {
 
 class _SensorGrid extends StatelessWidget {
   final SensorData reading;
+  final List<SensorData> history;
 
-  const _SensorGrid({required this.reading});
+  const _SensorGrid({required this.reading, required this.history});
 
   @override
   Widget build(BuildContext context) {
     final cards = [
       _SensorCardData(
         'Temperature',
+        'MPU6500',
+        'IMU sicaklik olcumu',
         reading.temperature,
         'C',
         Icons.thermostat,
@@ -388,6 +420,8 @@ class _SensorGrid extends StatelessWidget {
       ),
       _SensorCardData(
         'Soil Moisture',
+        'Toprak Nem Sensoru',
+        'Toprak nem yuzdesi ve ham analog deger',
         reading.soilMoisture ?? reading.humidity,
         '%',
         Icons.water_drop_outlined,
@@ -398,6 +432,8 @@ class _SensorGrid extends StatelessWidget {
       ),
       _SensorCardData(
         'MQ9 Gas',
+        'MQ9',
+        'Gaz algilama analog ham degeri',
         reading.gasLevel,
         'raw',
         Icons.air,
@@ -406,6 +442,8 @@ class _SensorGrid extends StatelessWidget {
       ),
       _SensorCardData(
         'Motion',
+        'HW-416',
+        'Dijital hareket algilama durumu',
         null,
         '',
         Icons.directions_run,
@@ -417,6 +455,8 @@ class _SensorGrid extends StatelessWidget {
       ),
       _SensorCardData(
         'Buzzer',
+        'Buzzer',
+        'Alarm cikisi ve uyari durumu',
         null,
         '',
         Icons.notifications_active_outlined,
@@ -428,6 +468,8 @@ class _SensorGrid extends StatelessWidget {
       ),
       _SensorCardData(
         'Accel',
+        'MPU6500',
+        'Ivme olcer vektor buyuklugu',
         _vectorMagnitude(reading.accelerometer),
         'm/s2',
         Icons.screen_rotation_alt_outlined,
@@ -436,6 +478,8 @@ class _SensorGrid extends StatelessWidget {
       ),
       _SensorCardData(
         'Gyro',
+        'MPU6500',
+        'Jiroskop vektor buyuklugu',
         _vectorMagnitude(reading.gyroscope),
         'dps',
         Icons.threesixty,
@@ -456,18 +500,41 @@ class _SensorGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final card = cards[index];
-        return SensorCard(
-          label: card.label,
-          value:
-              card.valueText ??
-              (card.value == null ? '--' : card.value!.toStringAsFixed(1)),
-          unit: card.unit,
-          icon: card.icon,
-          color: card.color,
-          isAlert: card.isAlert,
+        return GestureDetector(
+          onTap: () => _showSensorDetail(context, card),
+          child: SensorCard(
+            label: card.label,
+            value:
+                card.valueText ??
+                (card.value == null ? '--' : card.value!.toStringAsFixed(1)),
+            unit: card.unit,
+            icon: card.icon,
+            color: card.color,
+            isAlert: card.isAlert,
+          ),
         );
       },
     );
+  }
+
+  void _showSensorDetail(BuildContext context, _SensorCardData card) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0D1117),
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) {
+        return _SensorDetailSheet(
+          card: card,
+          points: _historyValues(card),
+          latestReading: reading,
+        );
+      },
+    );
+  }
+
+  List<double> _historyValues(_SensorCardData card) {
+    return history.map(card.valueOf).whereType<double>().toList();
   }
 
   double? _vectorMagnitude(Map<String, double>? vector) {
@@ -483,6 +550,8 @@ class _SensorGrid extends StatelessWidget {
 
 class _SensorCardData {
   final String label;
+  final String model;
+  final String description;
   final double? value;
   final String unit;
   final IconData icon;
@@ -492,6 +561,8 @@ class _SensorCardData {
 
   const _SensorCardData(
     this.label,
+    this.model,
+    this.description,
     this.value,
     this.unit,
     this.icon,
@@ -499,6 +570,223 @@ class _SensorCardData {
     this.isAlert, {
     this.valueText,
   });
+
+  double? valueOf(SensorData reading) {
+    return switch (label) {
+      'Temperature' => reading.temperature,
+      'Soil Moisture' => reading.soilMoisture ?? reading.humidity,
+      'MQ9 Gas' => reading.gasLevel,
+      'Motion' =>
+        reading.motionDetected == null
+            ? null
+            : (reading.motionDetected! ? 1 : 0),
+      'Buzzer' => reading.buzzer == null ? null : (reading.buzzer! ? 1 : 0),
+      'Accel' => _magnitude(reading.accelerometer),
+      'Gyro' => _magnitude(reading.gyroscope),
+      _ => null,
+    };
+  }
+
+  static double? _magnitude(Map<String, double>? vector) {
+    if (vector == null) {
+      return null;
+    }
+    final x = vector['x'] ?? 0;
+    final y = vector['y'] ?? 0;
+    final z = vector['z'] ?? 0;
+    return sqrt(x * x + y * y + z * z);
+  }
+}
+
+class _SensorDetailSheet extends StatelessWidget {
+  final _SensorCardData card;
+  final List<double> points;
+  final SensorData latestReading;
+
+  const _SensorDetailSheet({
+    required this.card,
+    required this.points,
+    required this.latestReading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final value =
+        card.valueText ??
+        (card.value == null
+            ? '--'
+            : '${card.value!.toStringAsFixed(1)} ${card.unit}');
+    final minY = points.isEmpty ? 0.0 : points.reduce(min);
+    final maxY = points.isEmpty ? 1.0 : points.reduce(max);
+    final padding = ((maxY - minY).abs() * 0.2).clamp(1.0, 999.0).toDouble();
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(card.icon, color: card.color, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.label,
+                        style: GoogleFonts.dmSans(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        card.model,
+                        style: GoogleFonts.spaceMono(
+                          color: const Color(0xFF00D4AA),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              card.description,
+              style: GoogleFonts.dmSans(
+                color: const Color(0xFF8B949E),
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _DetailRow(label: 'Son deger', value: value),
+            _DetailRow(label: 'Cihaz', value: latestReading.deviceId),
+            _DetailRow(
+              label: 'Sensor ID',
+              value: latestReading.sensorId.toString(),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Canli Grafik',
+              style: GoogleFonts.dmSans(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              height: 180,
+              padding: const EdgeInsets.fromLTRB(10, 16, 12, 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161B22),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF30363D)),
+              ),
+              child: points.length < 2
+                  ? Center(
+                      child: Text(
+                        'Grafik icin daha fazla canli veri bekleniyor.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.dmSans(
+                          color: const Color(0xFF8B949E),
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  : LineChart(
+                      LineChartData(
+                        minY: minY - padding,
+                        maxY: maxY + padding,
+                        gridData: FlGridData(
+                          drawVerticalLine: false,
+                          getDrawingHorizontalLine: (_) => const FlLine(
+                            color: Color(0xFF30363D),
+                            strokeWidth: 1,
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        titlesData: const FlTitlesData(
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          topTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                        ),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: [
+                              for (var i = 0; i < points.length; i++)
+                                FlSpot(i.toDouble(), points[i]),
+                            ],
+                            isCurved: true,
+                            color: card.color,
+                            barWidth: 3,
+                            dotData: const FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: card.color.withValues(alpha: 0.12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: const Color(0xFF8B949E),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.dmSans(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatusPanel extends StatelessWidget {

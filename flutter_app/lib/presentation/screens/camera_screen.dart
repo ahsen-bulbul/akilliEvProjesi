@@ -1,67 +1,131 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
+
+import '../../data/datasources/api_service.dart';
+import 'camera_event_log_screen.dart';
+import '../viewmodels/firebase_alarm_log_view_model.dart';
 
 class CameraScreen extends StatelessWidget {
   const CameraScreen({super.key});
 
-  static const _cameras = [
-    _CameraFeed('Camera 1', 'assets/videos/camera_1.mp4'),
-    _CameraFeed('Camera 2', 'assets/videos/camera_2.mp4'),
-    _CameraFeed('Camera 3', 'assets/videos/camera_3.mp4'),
-    _CameraFeed('Camera 4', 'assets/videos/camera_4.mp4'),
-  ];
+  static List<_CameraFeed> _feedsForPackage(String? packageId) {
+    return switch (packageId) {
+      'studio' => const [
+        _CameraFeed('Salon Kamera', 'assets/videos/camera_1.mp4'),
+        _CameraFeed('Giris Kamera', 'assets/videos/camera_2.mp4'),
+      ],
+      '3_plus_1' => const [
+        _CameraFeed('Salon Kamera', 'assets/videos/camera_1.mp4'),
+        _CameraFeed('Koridor Kamera', 'assets/videos/camera_2.mp4'),
+        _CameraFeed('Mutfak Kamera', 'assets/videos/camera_3.mp4'),
+      ],
+      'duplex' => const [
+        _CameraFeed('Alt Kat Kamera', 'assets/videos/camera_2.mp4'),
+        _CameraFeed('Ust Kat Kamera', 'assets/videos/camera_4.mp4'),
+        _CameraFeed('Merdiven Kamera', 'assets/videos/camera_1.mp4'),
+        _CameraFeed('Bahce Kamera', 'assets/videos/camera_3.mp4'),
+      ],
+      '4_plus_1' => const [
+        _CameraFeed('Salon Kamera', 'assets/videos/camera_1.mp4'),
+        _CameraFeed('Koridor Kamera', 'assets/videos/camera_2.mp4'),
+        _CameraFeed('Calisma Kamera', 'assets/videos/camera_3.mp4'),
+        _CameraFeed('Dis Kapi Kamera', 'assets/videos/camera_4.mp4'),
+      ],
+      _ => const [
+        _CameraFeed('Camera 1', 'assets/videos/camera_1.mp4'),
+        _CameraFeed('Camera 2', 'assets/videos/camera_2.mp4'),
+        _CameraFeed('Camera 3', 'assets/videos/camera_3.mp4'),
+        _CameraFeed('Camera 4', 'assets/videos/camera_4.mp4'),
+      ],
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Camera Wall',
-                    style: GoogleFonts.dmSans(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
+    return FutureBuilder<SetupStatus>(
+      future: ApiService.getSetupStatus(),
+      builder: (context, snapshot) {
+        final cameras = _feedsForPackage(snapshot.data?.packageId);
+        final packageLabel = snapshot.data?.packageId == null
+            ? 'Local video feeds'
+            : '${snapshot.data!.packageId} camera plan';
+
+        return Scaffold(
+          backgroundColor: const Color(0xFF0D1117),
+          body: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Camera Wall',
+                              style: GoogleFonts.dmSans(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              packageLabel,
+                              style: GoogleFonts.dmSans(
+                                color: const Color(0xFF8B949E),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Olay kaydi',
+                        color: const Color(0xFF00D4AA),
+                        onPressed: () {
+                          final alarmLogViewModel = context
+                              .read<FirebaseAlarmLogViewModel>();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ChangeNotifierProvider.value(
+                                value: alarmLogViewModel,
+                                child: const CameraEventLogScreen(),
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.event_note_outlined),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Local video feeds',
-                    style: GoogleFonts.dmSans(
-                      color: const Color(0xFF8B949E),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 88),
-                itemCount: _cameras.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 0.78,
                 ),
-                itemBuilder: (context, index) {
-                  return _CameraTile(feed: _cameras[index]);
-                },
-              ),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 88),
+                    itemCount: cameras.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.78,
+                        ),
+                    itemBuilder: (context, index) {
+                      return _CameraTile(feed: cameras[index]);
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

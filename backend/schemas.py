@@ -125,6 +125,28 @@ class RoomCreate(BaseModel):
     name: str
 
 
+class SetupStatusOut(BaseModel):
+    is_configured: bool
+    room_count: int
+    device_count: int
+    sensor_count: int
+    package_id: Optional[str] = None
+    home_city: Optional[str] = None
+
+
+class SetupPackageIn(BaseModel):
+    package_id: str
+    home_city: str
+
+
+class SetupPackageOut(BaseModel):
+    package_id: str
+    home_city: str
+    room_count: int
+    device_count: int
+    sensor_count: int
+
+
 class UserOut(BaseModel):
     id: UUID
     email: Optional[str] = None

@@ -104,6 +104,10 @@ async def lifespan(app: FastAPI):
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS home_city VARCHAR(100)"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS home_latitude VARCHAR(50)"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS home_longitude VARCHAR(50)"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS setup_package VARCHAR(50)"))
     except SQLAlchemyError as exc:
         logging.warning("Veritabani semasi kontrol edilemedi: %s", exc)
 
@@ -222,11 +226,12 @@ def get_sensors(
 @app.get("/weather/current", response_model=schemas.WeatherOut)
 def get_current_weather(
     user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
 ):
-    del user_id
-    latitude = os.getenv("HOME_LATITUDE", "41.0027")
-    longitude = os.getenv("HOME_LONGITUDE", "39.7168")
-    location = os.getenv("HOME_LOCATION_NAME", "Trabzon")
+    user = _get_or_create_user(db, user_id)
+    latitude = user.home_latitude or os.getenv("HOME_LATITUDE", "41.0027")
+    longitude = user.home_longitude or os.getenv("HOME_LONGITUDE", "39.7168")
+    location = user.home_city or os.getenv("HOME_LOCATION_NAME", "Trabzon")
 
     params = urllib.parse.urlencode(
         {
@@ -406,6 +411,164 @@ def _validate_room_for_user(
         raise HTTPException(status_code=404, detail="Oda bu kullaniciya ait degil")
 
 
+SETUP_PACKAGES = {
+    "studio": {
+        "rooms": [
+            {
+                "name": "Salon",
+                "devices": [("Salon Lamba", "light"), ("Salon Klima", "ac")],
+                "sensors": [("Salon Ortam Sensoru", "environment"), ("Salon Hareket Sensoru", "motion")],
+            },
+            {
+                "name": "Mutfak",
+                "devices": [("Mutfak Lamba", "light")],
+                "sensors": [("Mutfak Gaz Sensoru", "gas"), ("Mutfak Sicaklik Sensoru", "temperature")],
+            },
+            {
+                "name": "Banyo",
+                "devices": [("Banyo Lamba", "light")],
+                "sensors": [("Banyo Nem Sensoru", "humidity")],
+            },
+        ]
+    },
+    "duplex": {
+        "rooms": [
+            {"name": "Alt Kat Salon", "devices": [("Alt Kat Salon Lamba", "light"), ("Alt Kat Klima", "ac")], "sensors": [("Alt Kat Ortam Sensoru", "environment"), ("Alt Kat Hareket Sensoru", "motion")]},
+            {"name": "Mutfak", "devices": [("Mutfak Lamba", "light")], "sensors": [("Mutfak Gaz Sensoru", "gas")]},
+            {"name": "Yatak Odasi", "devices": [("Yatak Odasi Lamba", "light"), ("Yatak Odasi Fan", "fan")], "sensors": [("Yatak Odasi Ortam Sensoru", "environment")]},
+            {"name": "Cocuk Odasi", "devices": [("Cocuk Odasi Lamba", "light")], "sensors": [("Cocuk Odasi Ortam Sensoru", "environment")]},
+            {"name": "Ust Kat Banyo", "devices": [("Ust Kat Banyo Lamba", "light")], "sensors": [("Ust Kat Banyo Nem Sensoru", "humidity")]},
+            {"name": "Merdiven", "devices": [("Merdiven Lamba", "light")], "sensors": [("Merdiven Hareket Sensoru", "motion")]},
+            {"name": "Bahce", "devices": [("Bahce Lamba", "light"), ("Bahce Kamera", "camera")], "sensors": [("Bahce Hareket Sensoru", "motion")]},
+        ]
+    },
+    "3_plus_1": {
+        "rooms": [
+            {"name": "Salon", "devices": [("Salon Lamba", "light"), ("Salon Klima", "ac")], "sensors": [("Salon Ortam Sensoru", "environment"), ("Salon Hareket Sensoru", "motion")]},
+            {"name": "Mutfak", "devices": [("Mutfak Lamba", "light")], "sensors": [("Mutfak Gaz Sensoru", "gas")]},
+            {"name": "Yatak Odasi", "devices": [("Yatak Odasi Lamba", "light"), ("Yatak Odasi Fan", "fan")], "sensors": [("Yatak Odasi Ortam Sensoru", "environment")]},
+            {"name": "Cocuk Odasi", "devices": [("Cocuk Odasi Lamba", "light")], "sensors": [("Cocuk Odasi Ortam Sensoru", "environment")]},
+            {"name": "Calisma Odasi", "devices": [("Calisma Odasi Lamba", "light")], "sensors": [("Calisma Odasi Ortam Sensoru", "environment")]},
+            {"name": "Banyo", "devices": [("Banyo Lamba", "light")], "sensors": [("Banyo Nem Sensoru", "humidity")]},
+        ]
+    },
+    "4_plus_1": {
+        "rooms": [
+            {"name": "Salon", "devices": [("Salon Lamba", "light"), ("Salon Klima", "ac")], "sensors": [("Salon Ortam Sensoru", "environment"), ("Salon Hareket Sensoru", "motion")]},
+            {"name": "Mutfak", "devices": [("Mutfak Lamba", "light")], "sensors": [("Mutfak Gaz Sensoru", "gas")]},
+            {"name": "Yatak Odasi", "devices": [("Yatak Odasi Lamba", "light"), ("Yatak Odasi Fan", "fan")], "sensors": [("Yatak Odasi Ortam Sensoru", "environment")]},
+            {"name": "Cocuk Odasi 1", "devices": [("Cocuk Odasi 1 Lamba", "light")], "sensors": [("Cocuk Odasi 1 Ortam Sensoru", "environment")]},
+            {"name": "Cocuk Odasi 2", "devices": [("Cocuk Odasi 2 Lamba", "light")], "sensors": [("Cocuk Odasi 2 Ortam Sensoru", "environment")]},
+            {"name": "Calisma Odasi", "devices": [("Calisma Odasi Lamba", "light")], "sensors": [("Calisma Odasi Ortam Sensoru", "environment")]},
+            {"name": "Banyo", "devices": [("Banyo Lamba", "light")], "sensors": [("Banyo Nem Sensoru", "humidity")]},
+            {"name": "Koridor", "devices": [("Koridor Lamba", "light")], "sensors": [("Koridor Hareket Sensoru", "motion")]},
+        ]
+    },
+}
+
+
+def _setup_counts(db: Session, user_id: UUID) -> dict:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    room_count = db.query(models.Room).filter(models.Room.user_id == user_id).count()
+    device_count = db.query(models.Device).filter(models.Device.user_id == user_id).count()
+    sensor_count = db.query(models.Sensor).filter(models.Sensor.user_id == user_id).count()
+    return {
+        "is_configured": room_count > 0,
+        "room_count": room_count,
+        "device_count": device_count,
+        "sensor_count": sensor_count,
+        "package_id": user.setup_package if user else None,
+        "home_city": user.home_city if user else None,
+    }
+
+
+def _geocode_city(city: str) -> tuple[Optional[str], Optional[str], str]:
+    clean_city = city.strip()
+    if not clean_city:
+        raise HTTPException(status_code=400, detail="Ev sehri gerekli")
+
+    params = urllib.parse.urlencode(
+        {"name": clean_city, "count": 1, "language": "tr", "format": "json"}
+    )
+    url = f"https://geocoding-api.open-meteo.com/v1/search?{params}"
+
+    try:
+        with urllib.request.urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        logging.warning("Sehir konumu okunamadi: %s", exc)
+        return None, None, clean_city
+
+    results = payload.get("results") or []
+    if not results:
+        return None, None, clean_city
+
+    first = results[0]
+    location_name = first.get("name") or clean_city
+    country = first.get("country")
+    display_name = f"{location_name}, {country}" if country else location_name
+    return str(first.get("latitude")), str(first.get("longitude")), display_name
+
+
+def _create_setup_package(db: Session, user_id: UUID, package_id: str, home_city: str) -> dict:
+    package = SETUP_PACKAGES.get(package_id)
+    if not package:
+        raise HTTPException(status_code=400, detail="Gecersiz paket")
+
+    counts = _setup_counts(db, user_id)
+    if counts["room_count"] > 0:
+        raise HTTPException(status_code=409, detail="Kullanici kurulumu zaten yapilmis")
+
+    user = _get_or_create_user(db, user_id)
+    latitude, longitude, display_city = _geocode_city(home_city)
+    user.home_city = display_city
+    user.home_latitude = latitude
+    user.home_longitude = longitude
+    user.setup_package = package_id
+
+    created_rooms = 0
+    created_devices = 0
+    created_sensors = 0
+
+    for room_spec in package["rooms"]:
+        room = models.Room(user_id=user_id, name=room_spec["name"])
+        db.add(room)
+        db.flush()
+        created_rooms += 1
+
+        for device_name, device_type in room_spec["devices"]:
+            db.add(
+                models.Device(
+                    user_id=user_id,
+                    room_id=room.id,
+                    device_name=device_name,
+                    device_type=device_type,
+                )
+            )
+            created_devices += 1
+
+        for sensor_name, sensor_type in room_spec["sensors"]:
+            db.add(
+                models.Sensor(
+                    user_id=user_id,
+                    room_id=room.id,
+                    sensor_name=sensor_name,
+                    sensor_type=sensor_type,
+                    active=True,
+                )
+            )
+            created_sensors += 1
+
+    db.commit()
+    return {
+        "package_id": package_id,
+        "home_city": display_city,
+        "room_count": created_rooms,
+        "device_count": created_devices,
+        "sensor_count": created_sensors,
+    }
+
+
 def _get_first_admin(db: Session) -> Optional[models.User]:
     return (
         db.query(models.User)
@@ -426,6 +589,24 @@ def get_me(
         email=claims.get("email"),
     )
     return user
+
+
+@app.get("/setup/status", response_model=schemas.SetupStatusOut)
+def get_setup_status(
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    return _setup_counts(db, user_id)
+
+
+@app.post("/setup/package", response_model=schemas.SetupPackageOut)
+def apply_setup_package(
+    payload: schemas.SetupPackageIn,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _get_or_create_user(db, user_id)
+    return _create_setup_package(db, user_id, payload.package_id, payload.home_city)
 
 
 @app.get("/chat/messages", response_model=List[schemas.ChatMessageOut])

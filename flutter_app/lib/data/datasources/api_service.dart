@@ -77,6 +77,61 @@ class SensorDefinition {
   }
 }
 
+class SetupStatus {
+  final bool isConfigured;
+  final int roomCount;
+  final int deviceCount;
+  final int sensorCount;
+  final String? packageId;
+  final String? homeCity;
+
+  const SetupStatus({
+    required this.isConfigured,
+    required this.roomCount,
+    required this.deviceCount,
+    required this.sensorCount,
+    this.packageId,
+    this.homeCity,
+  });
+
+  factory SetupStatus.fromJson(Map<String, dynamic> json) {
+    return SetupStatus(
+      isConfigured: json['is_configured'] == true,
+      roomCount: json['room_count'] ?? 0,
+      deviceCount: json['device_count'] ?? 0,
+      sensorCount: json['sensor_count'] ?? 0,
+      packageId: json['package_id'] as String?,
+      homeCity: json['home_city'] as String?,
+    );
+  }
+}
+
+class SetupPackageResult {
+  final String packageId;
+  final String homeCity;
+  final int roomCount;
+  final int deviceCount;
+  final int sensorCount;
+
+  const SetupPackageResult({
+    required this.packageId,
+    required this.homeCity,
+    required this.roomCount,
+    required this.deviceCount,
+    required this.sensorCount,
+  });
+
+  factory SetupPackageResult.fromJson(Map<String, dynamic> json) {
+    return SetupPackageResult(
+      packageId: json['package_id'],
+      homeCity: json['home_city'],
+      roomCount: json['room_count'] ?? 0,
+      deviceCount: json['device_count'] ?? 0,
+      sensorCount: json['sensor_count'] ?? 0,
+    );
+  }
+}
+
 class WeatherData {
   final String location;
   final double temperature;
@@ -157,6 +212,32 @@ class ApiService {
     throw Exception(_errorMessage('Kullanici bilgisi alinamadi', response));
   }
 
+  static Future<SetupStatus> getSetupStatus() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/setup/status'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      return SetupStatus.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Kurulum durumu alinamadi', response));
+  }
+
+  static Future<SetupPackageResult> applySetupPackage({
+    required String packageId,
+    required String homeCity,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/setup/package'),
+      headers: _headers,
+      body: jsonEncode({'package_id': packageId, 'home_city': homeCity}),
+    );
+    if (response.statusCode == 200) {
+      return SetupPackageResult.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(_errorMessage('Paket uygulanamadi', response));
+  }
+
   static Future<List<SensorData>> getSensorHistory({int limit = 20}) async {
     final response = await http.get(
       Uri.parse('$baseUrl/sensors?limit=$limit'),
@@ -179,6 +260,18 @@ class ApiService {
       return data.map((e) => _deviceFromJson(e)).toList();
     }
     throw Exception(_errorMessage('Cihazlar alinamadi', response));
+  }
+
+  static Future<List<SensorDefinition>> getSensorDefinitions() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/sensor-definitions'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => SensorDefinition.fromJson(e)).toList();
+    }
+    throw Exception(_errorMessage('Sensorler alinamadi', response));
   }
 
   static Future<List<AppUser>> getAdminUsers() async {

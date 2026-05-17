@@ -13,6 +13,7 @@ import 'data/services/firebase_service.dart';
 import 'presentation/screens/admin_screen.dart';
 import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/reset_password_screen.dart';
+import 'presentation/screens/setup_package_screen.dart';
 import 'presentation/screens/camera_screen.dart';
 import 'presentation/screens/chat_screen.dart';
 import 'presentation/screens/home_screen.dart';
@@ -104,8 +105,20 @@ class _AppProviders extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  int _setupVersion = 0;
+
+  void _completeSetup() {
+    context.read<ControlViewModel>().loadControlData();
+    setState(() => _setupVersion++);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,9 +204,59 @@ class AuthGate extends StatelessWidget {
             if (user?.isAdmin == true) {
               return const AdminScreen();
             }
-            return const MainScreen();
+            return _SetupGate(
+              key: ValueKey(_setupVersion),
+              onCompleted: _completeSetup,
+            );
           },
         );
+      },
+    );
+  }
+}
+
+class _SetupGate extends StatelessWidget {
+  final VoidCallback onCompleted;
+
+  const _SetupGate({super.key, required this.onCompleted});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<SetupStatus>(
+      future: ApiService.getSetupStatus(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: const Color(0xFF0D1117),
+            body: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    snapshot.error.toString(),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSans(
+                      color: const Color(0xFFFFB4B4),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.data?.isConfigured != true) {
+          return SetupPackageScreen(onCompleted: onCompleted);
+        }
+
+        return const MainScreen();
       },
     );
   }
