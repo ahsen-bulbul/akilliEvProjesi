@@ -9,7 +9,7 @@ import urllib.request
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from uuid import UUID
-
+from typing import Optional, Tuple
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -482,7 +482,7 @@ def _setup_counts(db: Session, user_id: UUID) -> dict:
     }
 
 
-def _geocode_city(city: str) -> tuple[Optional[str], Optional[str], str]:
+def _geocode_city(city: str) -> Tuple[Optional[str], Optional[str], str]:
     clean_city = city.strip()
     if not clean_city:
         raise HTTPException(status_code=400, detail="Ev sehri gerekli")
