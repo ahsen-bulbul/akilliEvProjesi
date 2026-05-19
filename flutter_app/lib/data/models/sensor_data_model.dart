@@ -23,13 +23,25 @@ class SensorDataModel extends SensorData {
     required super.createdAt,
   });
 
+  static double? _doubleFromJson(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    return null;
+  }
+
   static Map<String, double>? _vectorFromJson(dynamic value) {
     if (value is! Map) {
       return null;
     }
-    return value.map(
-      (key, item) => MapEntry(key.toString(), (item as num).toDouble()),
-    );
+    final vector = <String, double>{};
+    for (final entry in value.entries) {
+      final item = entry.value;
+      if (item is num) {
+        vector[entry.key.toString()] = item.toDouble();
+      }
+    }
+    return vector;
   }
 
   factory SensorDataModel.fromJson(Map<String, dynamic> json) {
@@ -42,13 +54,13 @@ class SensorDataModel extends SensorData {
           data['device_id'] ?? sensorName ?? 'Sensor ${json['sensor_id']}',
       sensorName: sensorName,
       sensorType: json['sensor_type'] as String?,
-      temperature: (data['temperature'] as num?)?.toDouble(),
-      humidity: (data['humidity'] as num?)?.toDouble(),
-      gasLevel: (data['gas_level'] as num?)?.toDouble(),
-      lightLevel: (data['light_level'] as num?)?.toDouble(),
-      distanceCm: (data['distance_cm'] as num?)?.toDouble(),
-      soilRaw: (data['soil_raw'] as num?)?.toDouble(),
-      soilMoisture: (data['soil_moisture'] as num?)?.toDouble(),
+      temperature: _doubleFromJson(data['temperature']),
+      humidity: _doubleFromJson(data['humidity']),
+      gasLevel: _doubleFromJson(data['gas_level']),
+      lightLevel: _doubleFromJson(data['light_level']),
+      distanceCm: _doubleFromJson(data['distance_cm']),
+      soilRaw: _doubleFromJson(data['soil_raw']),
+      soilMoisture: _doubleFromJson(data['soil_moisture']),
       motionDetected: data['motion_detected'] as bool?,
       buzzer: data['buzzer'] as bool?,
       accelerometer: _vectorFromJson(data['accelerometer']),
@@ -65,13 +77,13 @@ class SensorDataModel extends SensorData {
       deviceId: json['device_id'] ?? 'unknown',
       sensorName: json['sensor_name'] as String?,
       sensorType: json['sensor_type'] as String?,
-      temperature: (json['temperature'] as num?)?.toDouble(),
-      humidity: (json['humidity'] as num?)?.toDouble(),
-      gasLevel: (json['gas_level'] as num?)?.toDouble(),
-      lightLevel: (json['light_level'] as num?)?.toDouble(),
-      distanceCm: (json['distance_cm'] as num?)?.toDouble(),
-      soilRaw: (json['soil_raw'] as num?)?.toDouble(),
-      soilMoisture: (json['soil_moisture'] as num?)?.toDouble(),
+      temperature: _doubleFromJson(json['temperature']),
+      humidity: _doubleFromJson(json['humidity']),
+      gasLevel: _doubleFromJson(json['gas_level']),
+      lightLevel: _doubleFromJson(json['light_level']),
+      distanceCm: _doubleFromJson(json['distance_cm']),
+      soilRaw: _doubleFromJson(json['soil_raw']),
+      soilMoisture: _doubleFromJson(json['soil_moisture']),
       motionDetected: json['motion_detected'] as bool?,
       buzzer: json['buzzer'] as bool?,
       accelerometer: _vectorFromJson(json['accelerometer']),

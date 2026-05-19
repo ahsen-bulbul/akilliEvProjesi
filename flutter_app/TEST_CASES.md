@@ -12,6 +12,7 @@ Test edilen moduller: `Message`, `SensorDataModel`, `ControlDevice`.
 | UT-04 | Cache map donusumu alanlari korur | Cache'e yazilacak sensor modeli vardir | `toCacheMap` ve `fromCacheMap` cagrilir | boolean, tarih ve gyro alanlari korunur | Gecti |
 | UT-05 | `copyWith` status alanini degistirir | Kapali cihaz nesnesi vardir | `copyWith(status: true)` cagrilir | Diger alanlar ayni, status true olur | Gecti |
 | UT-06 | `copyWith` bos cagrida status korur | Acik cihaz nesnesi vardir | `copyWith()` cagrilir | Status degismez | Gecti |
+| UT-07 | Bozuk MQTT sensor degerleri uygulamayi dusurmez | MQTT payload tipleri hatalidir | `SensorDataModel.fromMqttJson` cagrilir | Hatali sayisal alanlar `null`, default alanlar guvenli olur | Gecti |
 
 ## Widget Testler
 
@@ -26,10 +27,15 @@ Test edilen widgetlar: `ChatBubble`, `MessageInputField`, `SensorCard`, `SmartHo
 | WT-05 | Sensor karti temel bilgileri gosterir | Normal sensor degeri vardir | `SensorCard` pump edilir | Etiket, deger, birim ve ikon gorunur | Gecti |
 | WT-06 | Alarm durumunda uyari ikonu gosterilir | `isAlert: true` verilir | `SensorCard` pump edilir | Uyari ikonu gorunur | Gecti |
 | WT-07 | Supabase ayari yoksa config mesaji gosterilir | Dart define verilmemistir | `SmartHomeApp` pump edilir | Eksik Supabase mesaji gorunur | Gecti |
+| WT-08 | Bos mesaj gonderilmez | Input sadece bosluk icerir | Gonder ikonuna basilir | Callback calismaz | Gecti |
+| WT-09 | Uzun chat mesaji dar ekranda render edilir | 320px genislikte uzun mesaj vardir | `ChatBubble` pump edilir | Render hatasi olusmaz | Gecti |
 
 ## Integration Testler
 
 Test edilen akis: mesaj yazma, sensor alarm UI davranislari ve uygulama config baslangici.
+Bu dosyadaki senaryolar cihazda calisan integration test olarak tutulsa da kapsam olarak
+hala izole UI akislaridir; gercek backend/MQTT/Firebase entegrasyonu icin ek E2E
+senaryolari gereklidir.
 
 | ID | Test Adi / Aciklama | On Kosul | Test Adimlari | Beklenen Sonuc | Durum |
 | --- | --- | --- | --- | --- | --- |
@@ -37,6 +43,7 @@ Test edilen akis: mesaj yazma, sensor alarm UI davranislari ve uygulama config b
 | IT-02 | Sensor alarm akisi uyari ikonunu gosterir | Alarm karti aciktir | Alert sensor karti render edilir | Uyari ikonu gorunur | Gecti |
 | IT-03 | Mesaj gonderme yuklenme durumunu gosterir | `sending: true` verilir | Input render edilir | Progress gorunur ve TextField pasif olur | Gecti |
 | IT-04 | Eksik Supabase config uyarisi gosterilir | Dart define verilmemistir | `SmartHomeApp` baslatilir | Config eksik mesaji gorunur | Gecti |
+| IT-05 | Oda secimi ve cihaz kontrol akisi UI durumunu gunceller | Salon listelenir, cihaz kapali baslar | Oda secilir, switch acilir | Cihaz `Acik` olur ve son komut metni guncellenir | Gecti |
 
 ## Calistirma Komutlari
 
@@ -50,5 +57,5 @@ flutter test integration_test/chat_flow_test.dart
 Son dogrulama:
 
 - `flutter analyze`: `No issues found!`
-- `flutter test`: `13 tests passed`
-- `flutter test integration_test/chat_flow_test.dart`: `4 tests passed`
+- `flutter test`: `16 tests passed`
+- `flutter test integration_test/chat_flow_test.dart`: `5 tests passed` (cihaz/emulator gerektirir)

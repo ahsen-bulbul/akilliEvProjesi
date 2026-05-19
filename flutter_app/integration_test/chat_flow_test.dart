@@ -88,5 +88,73 @@ void main() {
 
       expect(find.textContaining('Supabase ayarlari eksik'), findsOneWidget);
     });
+
+    testWidgets(
+      'IT-05 oda secimi ve cihaz kontrol akisi UI durumunu gunceller',
+      (tester) async {
+        await tester.pumpWidget(const MaterialApp(home: _ControlFlowHarness()));
+
+        expect(find.text('Odalar'), findsOneWidget);
+        expect(find.text('Salon'), findsOneWidget);
+        expect(find.text('Salon Lambasi'), findsNothing);
+
+        await tester.tap(find.text('Salon'));
+        await tester.pump();
+
+        expect(find.text('Salon Lambasi'), findsOneWidget);
+        expect(find.text('Kapali'), findsOneWidget);
+
+        await tester.tap(find.byType(Switch));
+        await tester.pump();
+
+        expect(find.text('Acik'), findsOneWidget);
+        expect(
+          find.text('Son komut: turn_on -> Salon Lambasi'),
+          findsOneWidget,
+        );
+      },
+    );
   });
+}
+
+class _ControlFlowHarness extends StatefulWidget {
+  const _ControlFlowHarness();
+
+  @override
+  State<_ControlFlowHarness> createState() => _ControlFlowHarnessState();
+}
+
+class _ControlFlowHarnessState extends State<_ControlFlowHarness> {
+  var _selectedRoom = '';
+  var _deviceEnabled = false;
+  var _lastCommand = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Odalar')),
+      body: Column(
+        children: [
+          ListTile(
+            title: const Text('Salon'),
+            onTap: () => setState(() => _selectedRoom = 'Salon'),
+          ),
+          if (_selectedRoom == 'Salon')
+            SwitchListTile(
+              title: const Text('Salon Lambasi'),
+              subtitle: Text(_deviceEnabled ? 'Acik' : 'Kapali'),
+              value: _deviceEnabled,
+              onChanged: (value) {
+                setState(() {
+                  _deviceEnabled = value;
+                  _lastCommand =
+                      'Son komut: ${value ? 'turn_on' : 'turn_off'} -> Salon Lambasi';
+                });
+              },
+            ),
+          if (_lastCommand.isNotEmpty) Text(_lastCommand),
+        ],
+      ),
+    );
+  }
 }

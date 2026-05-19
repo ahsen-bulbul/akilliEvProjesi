@@ -57,5 +57,28 @@ void main() {
 
       expect(sendCount, equals(0));
     });
+
+    testWidgets('WT-08 bos mesaj gonderilirse callback calismaz', (
+      tester,
+    ) async {
+      final controller = TextEditingController(text: '   ');
+      var sendCount = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessageInputField(
+              controller: controller,
+              onSend: () => sendCount++,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+
+      expect(sendCount, equals(0));
+    });
   });
 }

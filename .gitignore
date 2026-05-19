@@ -1,0 +1,26 @@
+# Environment files
+.env
+*.env
+!*.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+
+# Performance test outputs
+performance/results*.jtl
+performance/report/
+
+# IDE and OS files
+.idea/
+*.iml
+.DS_Store

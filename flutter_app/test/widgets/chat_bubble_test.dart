@@ -52,5 +52,34 @@ void main() {
       expect(find.text('Size nasil yardimci olabiliriz?'), findsOneWidget);
       expect(find.text('09:05'), findsOneWidget);
     });
+
+    testWidgets(
+      'WT-09 uzun mesaj dar ekranda hata olusturmadan render edilir',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final message = Message(
+          id: '3',
+          senderId: 'user-1',
+          receiverId: 'admin-1',
+          text: 'Cok uzun mesaj ' * 20,
+          timestamp: DateTime(2026, 5, 17, 11),
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ChatBubble(message: message, isOwnMessage: true),
+            ),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('Cok uzun mesaj'), findsOneWidget);
+      },
+    );
   });
 }

@@ -15,7 +15,7 @@ def load_env_file(path):
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
-            os.environ[key.strip()] = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 load_env_file(".env")
@@ -25,13 +25,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable tanimli degil")
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"sslmode": "require"},
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True,
-)
+engine_kwargs = {"pool_pre_ping": True}
+if not DATABASE_URL.startswith("sqlite"):
+    engine_kwargs.update(
+        {
+            "connect_args": {"sslmode": "require"},
+            "pool_size": 5,
+            "max_overflow": 10,
+        }
+    )
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

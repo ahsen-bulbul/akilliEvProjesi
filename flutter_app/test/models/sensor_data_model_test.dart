@@ -54,5 +54,23 @@ void main() {
       expect(restored.gyroscope, equals({'x': 0.1, 'y': 0.2}));
       expect(restored.createdAt, equals(createdAt));
     });
+
+    test('UT-07 bozuk MQTT sensor degerleri uygulamayi dusurmez', () {
+      final model = SensorDataModel.fromMqttJson({
+        'id': 'hatali-id',
+        'sensor_id': 'hatali-sensor',
+        'temperature': 'sicak',
+        'humidity': null,
+        'gas_level': {'ppm': 900},
+        'accelerometer': {'x': 1, 'y': 'bozuk', 'z': 0},
+      });
+
+      expect(model.sensorId, equals(0));
+      expect(model.deviceId, equals('unknown'));
+      expect(model.temperature, isNull);
+      expect(model.humidity, isNull);
+      expect(model.gasLevel, isNull);
+      expect(model.accelerometer, equals({'x': 1.0, 'z': 0.0}));
+    });
   });
 }

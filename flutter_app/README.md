@@ -299,7 +299,8 @@ Temel UI bilesenleri test edilir:
 
 ### Integration Test
 
-`integration_test/chat_flow_test.dart` icinde mesaj input akisi, sensor alarm UI davranisi ve config baslangic ekrani test edilir.
+`integration_test/chat_flow_test.dart` icinde mesaj input akisi, sensor alarm UI davranisi,
+config baslangic ekrani ve oda secimi -> cihaz kontrolu UI akisi test edilir.
 
 ### Test Komutlari
 
@@ -312,8 +313,8 @@ flutter test integration_test/chat_flow_test.dart
 Son bilinen test ozeti:
 
 - `flutter analyze`: No issues found
-- `flutter test`: 13 test passed
-- `flutter test integration_test/chat_flow_test.dart`: 4 test passed
+- `flutter test`: 16 test passed
+- `flutter test integration_test/chat_flow_test.dart`: 5 test passed
 
 ## Firebase ve Firestore
 

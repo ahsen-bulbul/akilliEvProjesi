@@ -12,6 +12,13 @@ class MessageInputField extends StatelessWidget {
     required this.onSend,
   });
 
+  void _handleSend() {
+    if (sending || controller.text.trim().isEmpty) {
+      return;
+    }
+    onSend();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -31,7 +38,7 @@ class MessageInputField extends StatelessWidget {
                 maxLines: 4,
                 enabled: !sending,
                 textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onSend(),
+                onSubmitted: (_) => _handleSend(),
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'Mesajinizi yazin...',
@@ -61,7 +68,7 @@ class MessageInputField extends StatelessWidget {
                 foregroundColor: const Color(0xFF06130F),
                 fixedSize: const Size(48, 48),
               ),
-              onPressed: sending ? null : onSend,
+              onPressed: sending ? null : _handleSend,
               icon: sending
                   ? const SizedBox(
                       width: 18,

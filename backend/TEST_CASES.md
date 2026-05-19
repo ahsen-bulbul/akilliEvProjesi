@@ -62,7 +62,18 @@ python3 -m unittest discover -v -s backend/tests -p "test_*.py"
 | BUT-40 | Var olan FCM token guncellenir | Token DB'de vardir | `register_fcm_token` cagrilir | `updated_at` set edilir, yeni kayit eklenmez | Gecti |
 | BUT-41 | FCM token DB hatasinda rollback ve 500 doner | DB query hata firlatir | `register_fcm_token` cagrilir | Rollback olur ve 500 hatasi doner | Gecti |
 | BUT-42 | Health endpoint running doner | On kosul yok | `health` cagrilir | `{"status": "running"}` doner | Gecti |
+| BET-01 | Health endpoint contract running doner | On kosul yok | `health` route fonksiyonu cagrilir | `{"status": "running"}` doner | Gecti |
+| BET-02 | `/me` current user claims ile kullanici doner | Claims icinde user id ve email vardir | `get_me` route fonksiyonu cagrilir | Kullanici email ve admin bilgisi doner | Gecti |
+| BET-03 | Chat mesaj endpoint'i bos metni reddeder | Mesaj sadece bosluk icerir | `create_chat_message` route fonksiyonu cagrilir | 400 `Mesaj bos olamaz` doner, commit edilmez | Gecti |
+| BET-04 | Admin chat listeleme hedef kullanici ister | Current user admindir, hedef yoktur | `list_chat_messages` cagrilir | 400 `Hedef kullanici gerekli` doner | Gecti |
+| BET-05 | Control endpoint olmayan cihazi commit etmeden reddeder | DB cihaz bulamaz | `send_control_command` route fonksiyonu cagrilir | 404 `Cihaz bulunamadi` doner, commit edilmez | Gecti |
+| BET-06 | Admin users endpoint admin olmayan kullaniciyi reddeder | Kullanici admin degildir | `list_users` cagrilir | 403 `Admin yetkisi gerekli` doner | Gecti |
+| BET-07 | FCM token endpoint yeni token olusturur | Token DB'de yoktur | `register_fcm_token` route fonksiyonu cagrilir | Token eklenir ve commit edilir | Gecti |
+| BET-08 | Control endpoint mevcut cihazi acar | Cihaz DB'de vardir ve kapali durumdadir | `send_control_command(turn_on)` cagrilir | Status true olur ve commit edilir | Gecti |
+| BET-09 | Setup status endpoint kurulum sayaclarini doner | `_setup_counts` mock'lanmistir | `get_setup_status` cagrilir | Oda/cihaz/sensor sayilari doner | Gecti |
+| BMT-01 | MQTT sensor mesaji DB'ye kaydedilir | Gecerli MQTT JSON payload vardir | `on_message` cagrilir | `SensorReading` eklenir, commit ve close cagrilir | Gecti |
+| BMT-02 | Bozuk MQTT JSON session acmadan yok sayilir | Payload JSON degildir | `on_message` cagrilir | DB session acilmaz | Gecti |
 
 Son dogrulama:
 
-- `python3 -m unittest discover -s backend/tests -p "test_*.py"`: `42 tests passed`
+- `./venv/bin/python -m unittest discover -s backend/tests -p "test_*.py"`: `53 tests passed`
